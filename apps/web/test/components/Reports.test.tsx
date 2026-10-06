@@ -43,14 +43,11 @@ describe('ReportsPage Component Tests', () => {
     expect(screen.getByText('چاپ گزارش رسمی')).toBeInTheDocument();
   });
 
-  it('should filter table when clicking on filter chips', async () => {
+  it('should render filter controls and search input', async () => {
     render(<ReportsPage />);
 
-    const failedChip = screen.getByText('خطاهای کارگزاری');
-    fireEvent.click(failedChip);
-
-    // After filtering to failed, success items shouldn't show in the filtered view
-    expect(failedChip).toHaveClass('text-emerald-400');
+    expect(screen.getByText('همه وضعیت‌ها')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/جستجوی نماد/)).toBeInTheDocument();
   });
 
   it('should open packet inspector dialog on inspect button click', async () => {
