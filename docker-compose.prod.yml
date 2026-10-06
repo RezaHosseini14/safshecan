@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  api:
+    image: ${API_IMAGE}
+    container_name: saf-shekan-api
+    restart: unless-stopped
+    ports:
+      - "3880:3880"
+    environment:
+      - NODE_ENV=production
+      - PORT=3880
+    volumes:
+      - ./config.json:/app/apps/api/config.json
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3880/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - safshekan-net
+
+  web:
+    image: ${WEB_IMAGE}
+    container_name: saf-shekan-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - API_URL=http://api:3880
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - safshekan-net
+
+networks:
+  safshekan-net:
+    driver: bridge

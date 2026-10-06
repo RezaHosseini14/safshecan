@@ -1,0 +1,511 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ========================================================
+   یکان بخ (YEKAN BAKH) - فمیلی فونت اختصاصی و بهینه‌سازی شده
+   شامل نگارش استاندارد و نگارش اعداد فارسی (FaNum)
+   ======================================================== */
+@font-face {
+  font-family: 'Yekan Bakh';
+  src: url('/fonts/joys-yekan-bakh-fanum-vf.woff2') format('woff2');
+  font-weight: 100 950;
+  font-stretch: 62.5% 150%;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'YekanBakh';
+  src: url('/fonts/joys-yekan-bakh-fanum-vf.woff2') format('woff2');
+  font-weight: 100 950;
+  font-stretch: 62.5% 150%;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'YekanBakhFaNum';
+  src: url('/fonts/joys-yekan-bakh-fanum-vf.woff2') format('woff2');
+  font-weight: 100 950;
+  font-stretch: 62.5% 150%;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'YekanBakhEn';
+  src: url('/fonts/joys-yekan-bakh-vf.woff2') format('woff2');
+  font-weight: 100 950;
+  font-stretch: 62.5% 150%;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme inline {
+  --font-sans: var(--font-yekan-bakh), 'Yekan Bakh', 'YekanBakh', 'YekanBakhFaNum', system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', var(--font-yekan-bakh), 'Yekan Bakh', monospace;
+  --font-yekan: var(--font-yekan-bakh), 'Yekan Bakh', 'YekanBakh', sans-serif;
+  --font-yekan-fanum: var(--font-yekan-bakh), 'YekanBakhFaNum', 'Yekan Bakh', sans-serif;
+  --font-yekan-en: var(--font-yekan-bakh-en), 'YekanBakhEn', sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+:root {
+  /* LIGHT MODE - Crisp High-Tech Bloomberg/Fintech Terminal */
+  --background: #f8fafc;
+  --foreground: #090d16;
+
+  --card: rgba(255, 255, 255, 0.9);
+  --card-foreground: #090d16;
+
+  --popover: #ffffff;
+  --popover-foreground: #090d16;
+
+  --primary: #059669;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+
+  --muted: #f1f5f9;
+  --muted-foreground: #475569;
+
+  --accent: #e0f2fe;
+  --accent-foreground: #0369a1;
+
+  --destructive: #e11d48;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(15, 23, 42, 0.12);
+  --input: rgba(15, 23, 42, 0.15);
+  --ring: #059669;
+  --radius: 0.75rem;
+
+  --glass-panel-bg: rgba(255, 255, 255, 0.88);
+  --glass-panel-border: rgba(15, 23, 42, 0.1);
+  --glass-panel-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.95), 0 20px 45px -15px rgba(15, 23, 42, 0.08);
+
+  --glass-subtle-bg: rgba(248, 250, 252, 0.85);
+  --glass-subtle-border: rgba(15, 23, 42, 0.08);
+
+  --glass-well-bg: rgba(241, 245, 249, 0.95);
+  --glass-well-border: rgba(15, 23, 42, 0.1);
+  --glass-well-shadow: inset 0 2px 4px 0 rgba(15, 23, 42, 0.06);
+
+  --glass-input-bg: rgba(255, 255, 255, 0.95);
+  --glass-input-border: rgba(15, 23, 42, 0.15);
+  --glass-input-focus-border: #0284c7;
+  --glass-input-focus-shadow: 0 0 15px -2px rgba(2, 132, 199, 0.25);
+
+  --scrollbar-track: rgba(241, 245, 249, 0.8);
+  --scrollbar-thumb: rgba(100, 116, 139, 0.3);
+  --scrollbar-thumb-hover: rgba(5, 150, 105, 0.5);
+
+  --neon-emerald: 0 0 8px rgba(5, 150, 105, 0.4);
+  --neon-cyan: 0 0 8px rgba(2, 132, 199, 0.4);
+  --neon-rose: 0 0 8px rgba(225, 29, 72, 0.4);
+}
+
+.dark {
+  /* DARK MODE - Cyber-Fintech Deep Space / User Signature Aesthetic */
+  --background: #070b12;
+  --foreground: #cbd5e1;
+
+  --card: rgba(14, 20, 32, 0.7);
+  --card-foreground: #f8fafc;
+
+  --popover: #0b111e;
+  --popover-foreground: #f8fafc;
+
+  --primary: #10b981;
+  --primary-foreground: #022c22;
+
+  --secondary: rgba(255, 255, 255, 0.05);
+  --secondary-foreground: #cbd5e1;
+
+  --muted: rgba(255, 255, 255, 0.04);
+  --muted-foreground: #94a3b8;
+
+  --accent: rgba(56, 189, 248, 0.12);
+  --accent-foreground: #38bdf8;
+
+  --destructive: #f43f5e;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.09);
+  --ring: #10b981;
+
+  --glass-panel-bg: rgba(14, 20, 32, 0.7);
+  --glass-panel-border: rgba(255, 255, 255, 0.08);
+  --glass-panel-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 20px 0 rgba(16, 185, 129, 0.02), 0 20px 45px -15px rgba(0, 0, 0, 0.75);
+
+  --glass-subtle-bg: rgba(10, 15, 25, 0.55);
+  --glass-subtle-border: rgba(255, 255, 255, 0.07);
+
+  --glass-well-bg: rgba(5, 9, 16, 0.8);
+  --glass-well-border: rgba(255, 255, 255, 0.06);
+  --glass-well-shadow: inset 0 2px 8px 0 rgba(0, 0, 0, 0.65);
+
+  --glass-input-bg: rgba(6, 10, 18, 0.7);
+  --glass-input-border: rgba(255, 255, 255, 0.09);
+  --glass-input-focus-border: rgba(56, 189, 248, 0.6);
+  --glass-input-focus-shadow: 0 0 20px -2px rgba(6, 182, 212, 0.3), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12);
+
+  --scrollbar-track: rgba(5, 8, 14, 0.6);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb-hover: rgba(16, 185, 129, 0.4);
+
+  --neon-emerald: 0 0 16px rgba(16, 185, 129, 0.5), 0 0 35px rgba(16, 185, 129, 0.25);
+  --neon-cyan: 0 0 16px rgba(56, 189, 248, 0.5), 0 0 35px rgba(6, 182, 212, 0.25);
+  --neon-rose: 0 0 16px rgba(244, 63, 94, 0.5), 0 0 35px rgba(244, 63, 94, 0.25);
+}
+
+@layer base {
+  *, ::before, ::after {
+    border-color: var(--border);
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    direction: rtl;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-yekan-bakh), 'Yekan Bakh', 'YekanBakh', 'YekanBakhFaNum', system-ui, -apple-system, sans-serif;
+    overscroll-behavior: none;
+    selection-background-color: rgba(16, 185, 129, 0.25);
+    selection-color: #6ee7b7;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  input, button, select, textarea {
+    font-family: inherit;
+  }
+}
+
+/* Utilities for explicit font control */
+.font-yekan {
+  font-family: var(--font-yekan-bakh), 'Yekan Bakh', 'YekanBakh', sans-serif;
+}
+
+.font-yekan-fanum {
+  font-family: var(--font-yekan-bakh), 'YekanBakhFaNum', 'Yekan Bakh', sans-serif;
+}
+
+.font-yekan-en {
+  font-family: var(--font-yekan-bakh-en), 'YekanBakhEn', sans-serif;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Glassmorphism Styles mapped to design system variables */
+.glass-panel {
+  background: var(--glass-panel-bg);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: var(--glass-panel-shadow);
+}
+
+.glass-panel-subtle {
+  background: var(--glass-subtle-bg);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid var(--glass-subtle-border);
+}
+
+.glass-well {
+  background: var(--glass-well-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-well-border);
+  box-shadow: var(--glass-well-shadow);
+}
+
+.glass-input {
+  background: var(--glass-input-bg);
+  border: 1px solid var(--glass-input-border);
+  color: var(--foreground);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-input:focus {
+  border-color: var(--glass-input-focus-border);
+  box-shadow: var(--glass-input-focus-shadow);
+}
+
+/* Neon Text Glow */
+.neon-text-emerald {
+  text-shadow: var(--neon-emerald);
+}
+
+.neon-text-cyan {
+  text-shadow: var(--neon-cyan);
+}
+
+.neon-text-rose {
+  text-shadow: var(--neon-rose);
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes row-flash {
+  0% { background-color: rgba(16, 185, 129, 0.35); }
+  100% { background-color: transparent; }
+}
+
+.animate-new-row {
+  animation: row-flash 2.5s ease-out;
+}
+
+/* Print styling for official TSE execution reports */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  header, footer, .no-print, button, .pointer-events-none {
+    display: none !important;
+  }
+  .glass-panel, .glass-panel-subtle, .glass-well {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    color: #0f172a !important;
+  }
+  .text-white, .text-slate-200, .text-slate-300 {
+    color: #0f172a !important;
+  }
+  .text-slate-400 {
+    color: #475569 !important;
+  }
+  table {
+    border: 1px solid #e2e8f0 !important;
+  }
+  th {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+  td {
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+}
+
+/* ========================================================
+   DRIVER.JS PREMIUM SAFSHEKAN STYLES (Cyberpunk Fintech Tour)
+   ======================================================== */
+.driver-overlay {
+  /* IMPORTANT: Never apply backdrop-filter blur here!
+     The SVG overlay covers the full viewport, so backdrop-filter
+     would blur the entire screen including the spotlight cutout. */
+  pointer-events: none;
+}
+
+.driver-active-element {
+  position: relative !important;
+  z-index: 1000000001 !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  /* Crisp glowing halo around the highlighted section */
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6), 0 0 30px rgba(16, 185, 129, 0.25) !important;
+  transition: box-shadow 0.3s ease, transform 0.3s ease !important;
+}
+
+.driver-popover.safshekan-tour-popover {
+  direction: rtl !important;
+  text-align: right !important;
+  font-family: var(--font-sans), 'Yekan Bakh', 'YekanBakh', system-ui, sans-serif !important;
+  border-radius: 18px !important;
+  padding: 18px 20px !important;
+  max-width: 440px !important;
+  z-index: 1000000005 !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Dark theme driver popover */
+.dark .driver-popover.safshekan-tour-popover,
+:root:not(.light) .driver-popover.safshekan-tour-popover {
+  background: rgba(9, 14, 26, 0.95) !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85),
+              0 0 30px rgba(16, 185, 129, 0.15) !important;
+  color: #f8fafc !important;
+}
+
+/* Light theme driver popover */
+.light .driver-popover.safshekan-tour-popover {
+  background: rgba(255, 255, 255, 0.97) !important;
+  border: 1px solid rgba(5, 150, 105, 0.35) !important;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.12),
+              0 0 25px rgba(16, 185, 129, 0.18) !important;
+  color: #0f172a !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-title {
+  font-family: var(--font-sans), 'Yekan Bakh', 'YekanBakh', system-ui, sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.02em !important;
+  margin-bottom: 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: #10b981 !important;
+}
+
+.light .driver-popover.safshekan-tour-popover .driver-popover-title {
+  color: #047857 !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-description {
+  font-family: var(--font-sans), 'Yekan Bakh', 'YekanBakh', system-ui, sans-serif !important;
+  font-size: 12.5px !important;
+  line-height: 1.8 !important;
+  margin-bottom: 16px !important;
+}
+
+.dark .driver-popover.safshekan-tour-popover .driver-popover-description {
+  color: #cbd5e1 !important;
+}
+
+.light .driver-popover.safshekan-tour-popover .driver-popover-description {
+  color: #334155 !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin-top: 14px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.light .driver-popover.safshekan-tour-popover .driver-popover-footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-progress-text {
+  font-family: var(--font-mono), monospace !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(16, 185, 129, 0.2) !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-prev-btn {
+  font-family: var(--font-sans), 'Yekan Bakh', 'YekanBakh', system-ui, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 6px 14px !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #94a3b8 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.2s ease !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-prev-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.light .driver-popover.safshekan-tour-popover .driver-popover-prev-btn {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+.light .driver-popover.safshekan-tour-popover .driver-popover-prev-btn:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-next-btn {
+  font-family: var(--font-sans), 'Yekan Bakh', 'YekanBakh', system-ui, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 6px 16px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-next-btn:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 0 22px rgba(16, 185, 129, 0.5) !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-close-btn {
+  color: #94a3b8 !important;
+  top: 14px !important;
+  left: 14px !important;
+  right: auto !important;
+  transition: color 0.2s ease !important;
+}
+
+.driver-popover.safshekan-tour-popover .driver-popover-close-btn:hover {
+  color: #ef4444 !important;
+}
+
+/* Arrow styling */
+.driver-popover.safshekan-tour-popover .driver-popover-arrow {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}

@@ -1,0 +1,292 @@
+name: SafShekan CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: safshecan-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  REMOTE_DIR: /opt/saf-shekan
+
+jobs:
+  # ==========================================
+  # STAGE 1: Quality Gate, Lint & Tests
+  # ==========================================
+  validate:
+    name: 🧪 Quality Gate (Build, Lint & Test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm package manager
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Turbo Lint
+        run: pnpm lint
+
+      - name: Run Turbo Test Suite
+        run: pnpm test
+
+      - name: Run Turbo Monorepo Build
+        run: pnpm build
+
+  # ==========================================
+  # STAGE 2A: Build & Push API Image
+  # ==========================================
+  build-api:
+    name: 🐳 Docker API (Build & GHCR Push)
+    needs: [validate]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    outputs:
+      image_ref: ${{ steps.meta.outputs.ref }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image coordinates
+        id: meta
+        run: |
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-api"
+          TAG="${{ github.sha }}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & Push API Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.api
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.ref }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+  # ==========================================
+  # STAGE 2B: Build & Push Web Image
+  # ==========================================
+  build-web:
+    name: 🌐 Docker Web (Build & GHCR Push)
+    needs: [validate]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    outputs:
+      image_ref: ${{ steps.meta.outputs.ref }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image coordinates
+        id: meta
+        run: |
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-web"
+          TAG="${{ github.sha }}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & Push Web Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.web
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.ref }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  # ==========================================
+  # STAGE 3: Production Deployment to Server
+  # ==========================================
+  deploy:
+    name: 🚀 Deploy to Production VPS (5.159.49.36)
+    needs: [build-api, build-web]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          test -n "$SSH_HOST" || { echo "ERROR: Missing secret SSH_HOST (should be 5.159.49.36)"; exit 1; }
+          test -n "$SSH_USER" || { echo "ERROR: Missing secret SSH_USER (should be root)"; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "ERROR: Missing secret SSH_PRIVATE_KEY"; exit 1; }
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Synchronize compose configuration to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}"
+          scp -i ~/.ssh/id_deploy docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
+
+      - name: Pull images & rolling restart on server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          API_IMAGE: ${{ needs.build-api.outputs.image_ref }}
+          WEB_IMAGE: ${{ needs.build-web.outputs.image_ref }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            env API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
+            bash -s <<'EOF'
+          set -euo pipefail
+          cd "$REMOTE_DIR"
+
+          # Login to GHCR if token provided
+          if [ -n "${GHCR_TOKEN:-}" ]; then
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || true
+          fi
+
+          # Update image references in .env
+          touch .env
+          if grep -q '^API_IMAGE=' .env; then
+            sed -i "s|^API_IMAGE=.*|API_IMAGE=${API_IMAGE}|" .env
+          else
+            echo "API_IMAGE=${API_IMAGE}" >> .env
+          fi
+
+          if grep -q '^WEB_IMAGE=' .env; then
+            sed -i "s|^WEB_IMAGE=.*|WEB_IMAGE=${WEB_IMAGE}|" .env
+          else
+            echo "WEB_IMAGE=${WEB_IMAGE}" >> .env
+          fi
+
+          echo "--> Pulling latest container images..."
+          docker compose pull
+
+          echo "--> Applying zero-downtime rolling update..."
+          docker compose up -d --remove-orphans
+
+          echo "--> Cleaning up unused dangling images..."
+          docker image prune -f || true
+          EOF
+
+      - name: Production Health Check Verification
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          echo "🔍 Verifying API Health at http://${SSH_HOST}:3880/api/health..."
+          API_UP=false
+          for i in $(seq 1 30); do
+            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3880/api/health" >/dev/null; then
+              API_UP=true
+              echo "✓ API is UP & Healthy on attempt $i"
+              curl -s "http://${SSH_HOST}:3880/api/health"
+              echo ""
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 3
+          done
+
+          echo "🔍 Verifying Web Dashboard at http://${SSH_HOST}:3000..."
+          WEB_UP=false
+          for i in $(seq 1 30); do
+            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3000" >/dev/null; then
+              WEB_UP=true
+              echo "✓ Web Dashboard is UP & Healthy on attempt $i"
+              break
+            fi
+            echo "Waiting for Web Dashboard... ($i/30)"
+            sleep 3
+          done
+
+          if [ "$API_UP" = false ] || [ "$WEB_UP" = false ]; then
+            echo "❌ Deployment Health Check Failed!"
+            exit 1
+          fi
+
+          echo "🎉 All services deployed and verified successfully!"
+
+      - name: Publish Deployment Summary
+        if: always()
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ⚡ SafShekan Production Deployment Report
+
+          | Component | Status | URL |
+          |---|---|---|
+          | **Web Dashboard** | 🟢 Live | [http://${{ secrets.SSH_HOST }}:3000](http://${{ secrets.SSH_HOST }}:3000) |
+          | **API Engine** | 🟢 Live | [http://${{ secrets.SSH_HOST }}:3880/api/status](http://${{ secrets.SSH_HOST }}:3880/api/status) |
+          | **Swagger Docs** | 📖 Ready | [http://${{ secrets.SSH_HOST }}:3880/api/docs](http://${{ secrets.SSH_HOST }}:3880/api/docs) |
+          | **Health Check** | 🩺 Healthy | [http://${{ secrets.SSH_HOST }}:3880/api/health](http://${{ secrets.SSH_HOST }}:3880/api/health) |
+
+          - **Git SHA**: \`${{ github.sha }}\`
+          - **Triggered By**: @${{ github.actor }}
+          - **Target VPS**: \`${{ secrets.SSH_HOST }}\` (\`/opt/saf-shekan\`)
+          - **API Image**: \`${{ needs.build-api.outputs.image_ref }}\`
+          - **Web Image**: \`${{ needs.build-web.outputs.image_ref }}\`
+          EOF

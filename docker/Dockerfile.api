@@ -1,0 +1,36 @@
+# Multi-stage production build for SafShekan NestJS API
+FROM node:22-alpine AS base
+RUN npm install -g pnpm@9.15.0 turbo
+WORKDIR /app
+
+# Stage 1: Pruning monorepo for API
+FROM base AS pruner
+COPY . .
+RUN turbo prune @saf-shekan/api --docker
+
+# Stage 2: Install dependencies & build
+FROM base AS builder
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN pnpm install --frozen-lockfile
+
+COPY --from=pruner /app/out/full/ .
+RUN turbo run build --filter=@saf-shekan/api
+
+# Stage 3: Production Runner
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 safshekan
+
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=builder --chown=safshekan:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=safshekan:nodejs /app/apps/api ./apps/api
+COPY --from=builder --chown=safshekan:nodejs /app/packages ./packages
+
+USER safshekan
+EXPOSE 3880
+ENV PORT=3880
+
+CMD ["node", "apps/api/dist/index.js"]

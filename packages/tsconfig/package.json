@@ -1,0 +1,11 @@
+{
+  "name": "@saf-shekan/tsconfig",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared TypeScript configurations for SafShekan monorepo",
+  "files": [
+    "base.json",
+    "nestjs.json",
+    "nextjs.json"
+  ]
+}
