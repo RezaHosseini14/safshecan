@@ -75,53 +75,81 @@ export function EngineSettings({ timing, onSaveTiming }: EngineSettingsProps) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
         {/* Target Time */}
         <div className="space-y-1.5">
-          <Label className="block">زمان هدف بازگشایی</Label>
+          <div className="flex items-center justify-between">
+            <Label className="whitespace-nowrap font-bold text-xs text-foreground">
+              زمان هدف بازگشایی
+            </Label>
+            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 dark:bg-card/60 px-1.5 py-0.5 rounded border border-border/40">
+              Target Time
+            </span>
+          </div>
           <Input
             type="text"
             value={formData.targetTime}
             onChange={(e) => handleChange('targetTime', e.target.value)}
             placeholder="08:45:00.000"
-            className="font-mono font-bold text-right h-9"
+            className="font-mono font-bold text-right h-10"
           />
         </div>
 
         {/* Lead Time (ms) */}
         <div className="space-y-1.5">
-          <Label className="block">لیدتایم تاخیر شبکه (ms)</Label>
+          <div className="flex items-center justify-between">
+            <Label className="whitespace-nowrap font-bold text-xs text-foreground">
+              لیدتایم تاخیر شبکه
+            </Label>
+            <span className="text-[10px] font-mono text-sky-600 dark:text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20 font-bold">
+              ms
+            </span>
+          </div>
           <Input
             type="number"
             value={formData.leadTimeMs}
             onChange={(e) => handleChange('leadTimeMs', e.target.value)}
-            className="text-sky-600 dark:text-sky-400 font-mono font-bold text-right h-9"
+            className="text-sky-600 dark:text-sky-400 font-mono font-bold text-right h-10"
           />
         </div>
 
         {/* Burst Count */}
         <div className="space-y-1.5">
-          <Label className="block">تعداد شلیک رگباری (Burst)</Label>
+          <div className="flex items-center justify-between">
+            <Label className="whitespace-nowrap font-bold text-xs text-foreground">
+              تعداد شلیک رگباری
+            </Label>
+            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 dark:bg-card/60 px-1.5 py-0.5 rounded border border-border/40 font-semibold">
+              Burst Count
+            </span>
+          </div>
           <Input
             type="number"
             value={formData.burstCount}
             onChange={(e) => handleChange('burstCount', e.target.value)}
             min={1}
             max={30}
-            className="font-mono font-bold text-right h-9"
+            className="font-mono font-bold text-right h-10"
           />
         </div>
 
         {/* Burst Interval (ms) */}
         <div className="space-y-1.5">
-          <Label className="block">فاصله بین شلیک‌ها (ms)</Label>
+          <div className="flex items-center justify-between">
+            <Label className="whitespace-nowrap font-bold text-xs text-foreground">
+              فاصله بین شلیک‌ها
+            </Label>
+            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 dark:bg-card/60 px-1.5 py-0.5 rounded border border-border/40 font-semibold">
+              Interval (ms)
+            </span>
+          </div>
           <Input
             type="number"
             step="0.5"
             value={formData.burstIntervalMs}
             onChange={(e) => handleChange('burstIntervalMs', e.target.value)}
             min={0.5}
-            className="font-mono font-bold text-right h-9"
+            className="font-mono font-bold text-right h-10"
           />
         </div>
       </div>

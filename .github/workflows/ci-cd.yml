@@ -178,17 +178,35 @@ jobs:
           test -n "$SSH_PRIVATE_KEY" || { echo "ERROR: Missing secret SSH_PRIVATE_KEY"; exit 1; }
 
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 700 ~/.ssh
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          echo "" >> ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Verify key format validity without exposing content
+          ssh-keygen -l -f ~/.ssh/id_deploy || { echo "ERROR: Invalid SSH private key format"; exit 1; }
+
+          # Configure SSH client defaults
+          cat <<EOF > ~/.ssh/config
+          Host *
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ServerAliveInterval 30
+            ServerAliveCountMax 5
+            ConnectTimeout 20
+            LogLevel ERROR
+          EOF
+          chmod 600 ~/.ssh/config
 
       - name: Synchronize compose configuration to server
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}"
-          scp -i ~/.ssh/id_deploy docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
+          echo "Connecting to $SSH_USER@$SSH_HOST to prepare ${{ env.REMOTE_DIR }}..."
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}"
+          echo "Uploading docker-compose.prod.yml..."
+          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
 
       - name: Pull images & rolling restart on server
         env:
@@ -197,10 +215,10 @@ jobs:
           API_IMAGE: ${{ needs.build-api.outputs.image_ref }}
           WEB_IMAGE: ${{ needs.build-web.outputs.image_ref }}
           GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            env API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
             bash -s <<'EOF'
           set -euo pipefail
           cd "$REMOTE_DIR"
