@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node dev.js",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
     "cli": "tsx src/cli.ts",
     "backtest": "tsx src/run-backtest.ts",
