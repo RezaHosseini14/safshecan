@@ -7,6 +7,7 @@
         "dist/**",
         ".next/**",
         "!.next/cache/**",
+        "!.next/dev/**",
         "out/**"
       ]
     },
@@ -16,7 +17,10 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "cache": false
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
     },
     "test:watch": {
       "cache": false,

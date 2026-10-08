@@ -14,6 +14,7 @@
     "start": "pnpm --filter @saf-shekan/api start",
     "cli": "pnpm --filter @saf-shekan/cli start",
     "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
     "test:api": "pnpm --filter @saf-shekan/api test",
     "test:web": "pnpm --filter @saf-shekan/web test",
     "backtest": "pnpm --filter @saf-shekan/api run backtest",

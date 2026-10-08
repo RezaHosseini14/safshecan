@@ -11,6 +11,7 @@
     "start": "tsx src/index.ts",
     "dev": "tsc -w",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "clean": "rimraf dist"
   },
   "dependencies": {

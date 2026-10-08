@@ -7,76 +7,101 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+# Cancel superseded pull request runs. Leave pushes alone so a production
+# deploy is not killed halfway through.
 concurrency:
-  group: safshecan-${{ github.ref }}
-  cancel-in-progress: false
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
-  packages: write
 
 env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
   REGISTRY: ghcr.io
   REMOTE_DIR: /opt/saf-shekan
 
 jobs:
-  # ==========================================
-  # STAGE 1: Quality Gate, Lint & Tests
-  # ==========================================
-  validate:
-    name: 🧪 Quality Gate (Build, Lint & Test)
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install pnpm package manager
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
 
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Turbo Lint
+      - name: Lint
         run: pnpm lint
 
-      - name: Run Turbo Test Suite
-        run: pnpm test
-
-      - name: Run Turbo Monorepo Build
-        run: pnpm build
-
-  # ==========================================
-  # STAGE 2A: Build & Push API Image
-  # ==========================================
-  build-api:
-    name: 🐳 Docker API (Build & GHCR Push)
-    needs: [validate]
-    if: github.event_name != 'pull_request'
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    outputs:
-      image_ref: ${{ steps.meta.outputs.ref }}
-
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Test SSH target sanitizer
+        run: bash scripts/sanitize-ssh-target.sh --test
+
+      - name: Test
+        run: pnpm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Build
+        run: pnpm build
+
+  build-api:
+    name: Build and push API image
+    needs: [lint, typecheck, test, build]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_ref: ${{ steps.meta.outputs.ref }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -85,47 +110,48 @@ jobs:
       - name: Compute image coordinates
         id: meta
         run: |
-          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          set -euo pipefail
+          OWNER="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-api"
           TAG="${{ github.sha }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build & Push API Docker image
-        uses: docker/build-push-action@v6
+      - name: Build and push API image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: docker/Dockerfile.api
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ steps.meta.outputs.ref }}
             ${{ steps.meta.outputs.image }}:latest
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
-  # ==========================================
-  # STAGE 2B: Build & Push Web Image
-  # ==========================================
   build-web:
-    name: 🌐 Docker Web (Build & GHCR Push)
-    needs: [validate]
-    if: github.event_name != 'pull_request'
+    name: Build and push web image
+    needs: [lint, typecheck, test, build]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
+    permissions:
+      contents: read
+      packages: write
     outputs:
       image_ref: ${{ steps.meta.outputs.ref }}
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -134,177 +160,267 @@ jobs:
       - name: Compute image coordinates
         id: meta
         run: |
-          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          set -euo pipefail
+          OWNER="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-web"
           TAG="${{ github.sha }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build & Push Web Docker image
-        uses: docker/build-push-action@v6
+      - name: Build and push web image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: docker/Dockerfile.web
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ steps.meta.outputs.ref }}
             ${{ steps.meta.outputs.image }}:latest
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
-  # ==========================================
-  # STAGE 3: Production Deployment to Server
-  # ==========================================
   deploy:
-    name: 🚀 Deploy to Production VPS (5.159.49.36)
-    needs: [build-api, build-web]
-    if: github.event_name != 'pull_request'
+    name: Deploy to production
+    needs: [lint, typecheck, test, build, build-api, build-web]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Configure SSH Key
+      - name: Check required deploy secrets
+        id: gate
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          test -n "$SSH_HOST" || { echo "ERROR: Missing secret SSH_HOST (should be 5.159.49.36)"; exit 1; }
-          test -n "$SSH_USER" || { echo "ERROR: Missing secret SSH_USER (should be root)"; exit 1; }
-          test -n "$SSH_PRIVATE_KEY" || { echo "ERROR: Missing secret SSH_PRIVATE_KEY"; exit 1; }
+          set -euo pipefail
+          missing=()
+          [ -z "${SSH_HOST}" ] && missing+=(SSH_HOST)
+          [ -z "${SSH_USER}" ] && missing+=(SSH_USER)
+          [ -z "${SSH_PRIVATE_KEY}" ] && missing+=(SSH_PRIVATE_KEY)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Deploy skipped. Add these Actions secrets: ${missing[*]}"
+            {
+              echo "## Deploy skipped"
+              echo ""
+              echo "Production deploy did not run because these repository secrets are missing:"
+              echo ""
+              for name in "${missing[@]}"; do
+                echo "- \`$name\`"
+              done
+              echo ""
+              echo "Add them under Settings → Secrets and variables → Actions:"
+              echo "- \`SSH_HOST\`: server hostname or IP, one line"
+              echo "- \`SSH_USER\`: SSH login, one line (for example \`root\`)"
+              echo "- \`SSH_PRIVATE_KEY\`: private key whose public half is in the server authorized_keys"
+              echo ""
+              echo "Optional:"
+              echo "- \`SSH_KNOWN_HOSTS\`: output of \`ssh-keyscan -H <host>\`. Without it, the job records the current host key on each deploy."
+              echo "- \`GHCR_PULL_TOKEN\`: package read token. Without it, the job uses \`GITHUB_TOKEN\` to pull the images."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
-          echo "" >> ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
+      - name: Configure SSH
+        id: ssh
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          parsed="$(bash scripts/sanitize-ssh-target.sh)"
+          host="$(printf '%s\n' "$parsed" | sed -n 's/^host=//p')"
+          user="$(printf '%s\n' "$parsed" | sed -n 's/^user=//p')"
+          if [ -z "$host" ] || [ -z "$user" ]; then
+            echo "ERROR: Could not read a sanitized SSH host and user."
+            exit 1
+          fi
 
-          # Verify key format validity without exposing content
-          ssh-keygen -l -f ~/.ssh/id_deploy || { echo "ERROR: Invalid SSH private key format"; exit 1; }
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$HOME/.ssh/id_deploy"
+          chmod 600 "$HOME/.ssh/id_deploy"
+          if ! ssh-keygen -l -f "$HOME/.ssh/id_deploy" >/dev/null; then
+            echo "ERROR: SSH_PRIVATE_KEY is not a valid private key."
+            exit 1
+          fi
 
-          # Configure SSH client defaults
-          cat <<EOF > ~/.ssh/config
-          Host *
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
+          if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$HOME/.ssh/known_hosts"
+          else
+            echo "SSH_KNOWN_HOSTS is unset. Recording the current host key with ssh-keyscan."
+            echo "Add an SSH_KNOWN_HOSTS secret (ssh-keyscan -H <host>) so a changed host key fails closed."
+            ssh-keyscan -T 15 -H "$host" > "$HOME/.ssh/known_hosts"
+          fi
+          if [ ! -s "$HOME/.ssh/known_hosts" ]; then
+            echo "ERROR: No SSH host key is available for the deploy server."
+            echo "Set SSH_KNOWN_HOSTS to the output of: ssh-keyscan -H <host>"
+            exit 1
+          fi
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          cat > "$HOME/.ssh/config" <<EOF
+          Host deploy
+            HostName ${host}
+            User ${user}
+            IdentityFile ${HOME}/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ${HOME}/.ssh/known_hosts
+            ConnectTimeout 20
             ServerAliveInterval 30
             ServerAliveCountMax 5
-            ConnectTimeout 20
-            LogLevel ERROR
           EOF
-          chmod 600 ~/.ssh/config
+          chmod 600 "$HOME/.ssh/config"
 
-      - name: Synchronize compose configuration to server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+          {
+            echo "host=${host}"
+            echo "user=${user}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload compose file
+        if: steps.gate.outputs.skip != 'true'
         run: |
-          echo "Connecting to $SSH_USER@$SSH_HOST to prepare ${{ env.REMOTE_DIR }}..."
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}"
-          echo "Uploading docker-compose.prod.yml..."
-          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
+          set -euo pipefail
+          ssh deploy "mkdir -p '${REMOTE_DIR}'"
+          scp docker-compose.prod.yml "deploy:${REMOTE_DIR}/docker-compose.yml"
 
-      - name: Pull images & rolling restart on server
+      - name: Pull images and restart
+        if: steps.gate.outputs.skip != 'true'
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
           API_IMAGE: ${{ needs.build-api.outputs.image_ref }}
           WEB_IMAGE: ${{ needs.build-web.outputs.image_ref }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
-            bash -s <<'EOF'
+          set -euo pipefail
+          remote_env="$(printf 'API_IMAGE=%q WEB_IMAGE=%q GHCR_USER=%q GHCR_TOKEN=%q REMOTE_DIR=%q' \
+            "$API_IMAGE" "$WEB_IMAGE" "$GHCR_USER" "$GHCR_TOKEN" "$REMOTE_DIR")"
+          ssh deploy "${remote_env} bash -s" <<'EOF'
           set -euo pipefail
           cd "$REMOTE_DIR"
-
-          # Login to GHCR if token provided
           if [ -n "${GHCR_TOKEN:-}" ]; then
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || true
+            printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           fi
-
-          # Update image references in .env
           touch .env
-          if grep -q '^API_IMAGE=' .env; then
-            sed -i "s|^API_IMAGE=.*|API_IMAGE=${API_IMAGE}|" .env
-          else
-            echo "API_IMAGE=${API_IMAGE}" >> .env
-          fi
-
-          if grep -q '^WEB_IMAGE=' .env; then
-            sed -i "s|^WEB_IMAGE=.*|WEB_IMAGE=${WEB_IMAGE}|" .env
-          else
-            echo "WEB_IMAGE=${WEB_IMAGE}" >> .env
-          fi
-
-          echo "--> Pulling latest container images..."
+          tmp="$(mktemp)"
+          grep -v -e '^API_IMAGE=' -e '^WEB_IMAGE=' .env > "$tmp" || true
+          printf 'API_IMAGE=%s\nWEB_IMAGE=%s\n' "$API_IMAGE" "$WEB_IMAGE" >> "$tmp"
+          mv "$tmp" .env
+          echo "Pulling images..."
           docker compose pull
-
-          echo "--> Applying zero-downtime rolling update..."
+          echo "Restarting services..."
           docker compose up -d --remove-orphans
-
-          echo "--> Cleaning up unused dangling images..."
           docker image prune -f || true
           EOF
 
-      - name: Production Health Check Verification
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
+      - name: Check health on the server
+        id: server_health
+        if: steps.gate.outputs.skip != 'true'
         run: |
-          echo "🔍 Verifying API Health at http://${SSH_HOST}:3880/api/health..."
-          API_UP=false
-          for i in $(seq 1 30); do
-            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3880/api/health" >/dev/null; then
-              API_UP=true
-              echo "✓ API is UP & Healthy on attempt $i"
-              curl -s "http://${SSH_HOST}:3880/api/health"
-              echo ""
-              break
-            fi
-            echo "Waiting for API... ($i/30)"
-            sleep 3
-          done
-
-          echo "🔍 Verifying Web Dashboard at http://${SSH_HOST}:3000..."
-          WEB_UP=false
-          for i in $(seq 1 30); do
-            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3000" >/dev/null; then
-              WEB_UP=true
-              echo "✓ Web Dashboard is UP & Healthy on attempt $i"
-              break
-            fi
-            echo "Waiting for Web Dashboard... ($i/30)"
-            sleep 3
-          done
-
-          if [ "$API_UP" = false ] || [ "$WEB_UP" = false ]; then
-            echo "❌ Deployment Health Check Failed!"
-            exit 1
-          fi
-
-          echo "🎉 All services deployed and verified successfully!"
-
-      - name: Publish Deployment Summary
-        if: always()
-        run: |
-          cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ⚡ SafShekan Production Deployment Report
-
-          | Component | Status | URL |
-          |---|---|---|
-          | **Web Dashboard** | 🟢 Live | [http://${{ secrets.SSH_HOST }}:3000](http://${{ secrets.SSH_HOST }}:3000) |
-          | **API Engine** | 🟢 Live | [http://${{ secrets.SSH_HOST }}:3880/api/status](http://${{ secrets.SSH_HOST }}:3880/api/status) |
-          | **Swagger Docs** | 📖 Ready | [http://${{ secrets.SSH_HOST }}:3880/api/docs](http://${{ secrets.SSH_HOST }}:3880/api/docs) |
-          | **Health Check** | 🩺 Healthy | [http://${{ secrets.SSH_HOST }}:3880/api/health](http://${{ secrets.SSH_HOST }}:3880/api/health) |
-
-          - **Git SHA**: \`${{ github.sha }}\`
-          - **Triggered By**: @${{ github.actor }}
-          - **Target VPS**: \`${{ secrets.SSH_HOST }}\` (\`/opt/saf-shekan\`)
-          - **API Image**: \`${{ needs.build-api.outputs.image_ref }}\`
-          - **Web Image**: \`${{ needs.build-web.outputs.image_ref }}\`
+          set -euo pipefail
+          ssh deploy "REMOTE_DIR='${REMOTE_DIR}' bash -s" <<'EOF'
+          set -euo pipefail
+          probe() {
+            url="$1"
+            name="$2"
+            i=1
+            while [ "$i" -le 30 ]; do
+              if command -v curl >/dev/null 2>&1; then
+                if curl -sf --connect-timeout 5 "$url" >/dev/null; then
+                  echo "$name is healthy on the server (attempt $i)"
+                  return 0
+                fi
+              elif command -v wget >/dev/null 2>&1; then
+                if wget -qO- --timeout=5 "$url" >/dev/null; then
+                  echo "$name is healthy on the server (attempt $i)"
+                  return 0
+                fi
+              else
+                echo "ERROR: the server has neither curl nor wget, so the health check cannot run."
+                return 1
+              fi
+              echo "Waiting for $name on the server ($i/30)"
+              i=$((i + 1))
+              sleep 3
+            done
+            echo "ERROR: $name did not become healthy at $url"
+            docker compose -f "${REMOTE_DIR}/docker-compose.yml" ps || true
+            return 1
+          }
+          probe "http://127.0.0.1:3880/api/health" "API"
+          probe "http://127.0.0.1:3000" "Web"
           EOF
+
+      - name: Check public health
+        id: public_health
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          SSH_HOST: ${{ steps.ssh.outputs.host }}
+        run: |
+          set -euo pipefail
+          probe() {
+            url="$1"
+            name="$2"
+            i=1
+            while [ "$i" -le 20 ]; do
+              if curl -sf --connect-timeout 5 "$url" >/dev/null; then
+                echo "$name is reachable (attempt $i): $url"
+                return 0
+              fi
+              echo "Waiting for $name ($i/20)"
+              i=$((i + 1))
+              sleep 3
+            done
+            echo "ERROR: $name is not reachable from GitHub Actions at $url"
+            echo "The service can still be healthy on the server. Open inbound TCP for this port if it should be public."
+            return 1
+          }
+          probe "http://${SSH_HOST}:3880/api/health" "Public API"
+          probe "http://${SSH_HOST}:3000" "Public web"
+
+      - name: Publish deployment summary
+        if: always() && steps.gate.outputs.skip == 'false'
+        env:
+          SERVER_HEALTH: ${{ steps.server_health.outcome }}
+          PUBLIC_HEALTH: ${{ steps.public_health.outcome }}
+          API_IMAGE: ${{ needs.build-api.outputs.image_ref }}
+          WEB_IMAGE: ${{ needs.build-web.outputs.image_ref }}
+          SSH_HOST: ${{ steps.ssh.outputs.host }}
+        run: |
+          set -euo pipefail
+          if [ "$SERVER_HEALTH" = "success" ] && [ "$PUBLIC_HEALTH" = "success" ]; then
+            state="Deployed"
+          else
+            state="Failed"
+          fi
+          {
+            echo "## Production deploy: ${state}"
+            echo ""
+            echo "- Git SHA: \`${{ github.sha }}\`"
+            echo "- Triggered by: @${{ github.actor }}"
+            echo "- API image: \`${API_IMAGE}\`"
+            echo "- Web image: \`${WEB_IMAGE}\`"
+            echo "- Server health check: ${SERVER_HEALTH}"
+            echo "- Public health check: ${PUBLIC_HEALTH}"
+            if [ -n "${SSH_HOST}" ]; then
+              echo "- Web: http://${SSH_HOST}:3000"
+              echo "- API health: http://${SSH_HOST}:3880/api/health"
+              echo "- API docs: http://${SSH_HOST}:3880/api/docs"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
