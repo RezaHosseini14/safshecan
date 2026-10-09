@@ -42,10 +42,10 @@ flowchart LR
 
 | نام Secret | مقدار | الزامی |
 |---|---|---|
-| `SSH_HOST` | `5.159.49.36` | بله |
-| `SSH_USER` | `root` | بله |
+| `SSH_HOST` | `5.159.49.36` | اگر خالی باشد همین آدرس استفاده می‌شود |
+| `SSH_USER` | `root` | اگر خالی باشد `root` استفاده می‌شود |
 | `SSH_PRIVATE_KEY` | محتوای کلید خصوصی Ed25519 | بله |
-| `GHCR_PULL_TOKEN` | PAT با scope `read:packages` | بله (برای `docker login` روی VPS؛ `GITHUB_TOKEN` روی سرور کار نمی‌کند) |
+| `GHCR_PULL_TOKEN` | PAT با scope `read:packages` | خیر؛ ایمیج‌های GHCR عمومی هستند و فقط وقتی ست باشد `docker login` اجرا می‌شود |
 
 ### کلید SSH Deploy
 

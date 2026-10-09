@@ -175,6 +175,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST || '5.159.49.36' }}
+      SSH_USER: ${{ secrets.SSH_USER || 'root' }}
 
     steps:
       - name: Checkout repository
@@ -183,14 +186,10 @@ jobs:
       - name: Validate required secrets
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
-          test -n "$SSH_HOST" || { echo "ERROR: Missing secret SSH_HOST"; exit 1; }
-          test -n "$SSH_USER" || { echo "ERROR: Missing secret SSH_USER"; exit 1; }
-          test -n "$SSH_PRIVATE_KEY" || { echo "ERROR: Missing secret SSH_PRIVATE_KEY"; exit 1; }
-          test -n "$GHCR_PULL_TOKEN" || { echo "ERROR: Missing secret GHCR_PULL_TOKEN (PAT with read:packages)"; exit 1; }
+          test -n "$SSH_HOST" || { echo "::error::Missing SSH_HOST"; exit 1; }
+          test -n "$SSH_USER" || { echo "::error::Missing SSH_USER"; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "::error::Missing secret SSH_PRIVATE_KEY"; exit 1; }
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -198,8 +197,6 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
@@ -210,9 +207,6 @@ jobs:
           chmod 600 ~/.ssh/known_hosts ~/.ssh/config 2>/dev/null || true
 
       - name: Sync compose + nginx config to server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           ssh -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}/docker"
           scp docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
@@ -222,8 +216,6 @@ jobs:
 
       - name: Pull images & rolling restart on server
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.image_ref }}
           FRONTEND_IMAGE: ${{ needs.build-frontend.outputs.image_ref }}
           GHCR_USER: ${{ github.actor }}
@@ -236,7 +228,9 @@ jobs:
           set -euo pipefail
           cd "$REMOTE_DIR"
 
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          if [ -n "${GHCR_TOKEN}" ]; then
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          fi
 
           touch .env
           if grep -q '^BACKEND_IMAGE=' .env; then
@@ -268,8 +262,6 @@ jobs:
           EOF
 
       - name: Production Health Check Verification
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           echo "Verifying stack at http://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
           STACK_UP=false
@@ -301,14 +293,14 @@ jobs:
 
           | Component | Status | URL |
           |---|---|---|
-          | **Frontend Dashboard** | Live | [http://${{ secrets.SSH_HOST }}:3000](http://${{ secrets.SSH_HOST }}:3000) |
-          | **Backend Engine** | Live | [http://${{ secrets.SSH_HOST }}:3000/api/status](http://${{ secrets.SSH_HOST }}:3000/api/status) |
-          | **Swagger Docs** | Ready | [http://${{ secrets.SSH_HOST }}:3000/api/docs](http://${{ secrets.SSH_HOST }}:3000/api/docs) |
-          | **Health Check** | Healthy | [http://${{ secrets.SSH_HOST }}:3000/api/health](http://${{ secrets.SSH_HOST }}:3000/api/health) |
+          | **Frontend Dashboard** | Live | [http://${{ env.SSH_HOST }}:3000](http://${{ env.SSH_HOST }}:3000) |
+          | **Backend Engine** | Live | [http://${{ env.SSH_HOST }}:3000/api/status](http://${{ env.SSH_HOST }}:3000/api/status) |
+          | **Swagger Docs** | Ready | [http://${{ env.SSH_HOST }}:3000/api/docs](http://${{ env.SSH_HOST }}:3000/api/docs) |
+          | **Health Check** | Healthy | [http://${{ env.SSH_HOST }}:3000/api/health](http://${{ env.SSH_HOST }}:3000/api/health) |
 
           - **Git SHA**: \`${{ github.sha }}\`
           - **Triggered By**: @${{ github.actor }}
-          - **Target VPS**: \`${{ secrets.SSH_HOST }}\` (\`/opt/saf-shekan\`)
+          - **Target VPS**: \`${{ env.SSH_HOST }}\` (\`/opt/saf-shekan\`)
           - **Gateway**: nginx on \`:3000\` → backend \`/api\`+\`/ws\`, frontend \`/\`
           - **Backend Image**: \`${{ needs.build-backend.outputs.image_ref }}\`
           - **Frontend Image**: \`${{ needs.build-frontend.outputs.image_ref }}\`
