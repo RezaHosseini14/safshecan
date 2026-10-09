@@ -8,14 +8,14 @@ import { useSniperSocket } from '@/lib/use-sniper-socket';
 
 export default function ReportsPage() {
   const socket = useSniperSocket();
-  const { setEngineState, setTimeSync } = socket;
+  const { setEngineState, applyHttpTimeSync } = socket;
 
   useEffect(() => {
     api.getStatus().then((res) => {
       if (res.state) setEngineState(res.state);
-      if (res.timeSync) setTimeSync(res.timeSync);
+      if (res.timeSync) applyHttpTimeSync(res.timeSync);
     }).catch(() => undefined);
-  }, [setEngineState, setTimeSync]);
+  }, [setEngineState, applyHttpTimeSync]);
 
   return (
     <AppShell

@@ -4,6 +4,7 @@ import { request } from 'undici';
 import { DEFAULT_NTP_SERVERS, type TimeSyncStatus } from '@saf-shekan/core';
 import { BotConfigService } from '../bot-config/bot-config.service.js';
 import { formatExactTime } from '../shared/time/format-time.js';
+import { applySyncFailure, isManualTimeSource } from './time-sync-policy.js';
 
 @Injectable()
 export class NestTimeSyncService {
@@ -13,6 +14,8 @@ export class NestTimeSyncService {
   private lastSyncSource = 'None';
   private synchronized = false;
   private lastSyncTime: Date | null = null;
+  private revision = 0;
+  private syncing: Promise<TimeSyncStatus> | null = null;
 
   private readonly defaultHttpServers = [
     'https://api.tsetmc.com',
@@ -22,41 +25,49 @@ export class NestTimeSyncService {
 
   constructor(private readonly configService: BotConfigService) {}
 
-  public async sync(): Promise<TimeSyncStatus> {
+  public sync(): Promise<TimeSyncStatus> {
+    if (this.syncing) return this.syncing;
+    this.syncing = this.syncOnce().finally(() => {
+      this.syncing = null;
+    });
+    return this.syncing;
+  }
+
+  public releaseManualHold(): void {
+    if (!isManualTimeSource(this.lastSyncSource)) return;
+    this.lastSyncSource = 'None';
+  }
+
+  private async syncOnce(): Promise<TimeSyncStatus> {
+    const revision = this.revision;
     const configured = this.configService.getConfig().ntpServers?.filter((server) => server.trim().length > 0);
     const ntpServers = configured && configured.length > 0 ? configured : [...DEFAULT_NTP_SERVERS];
 
     for (const server of ntpServers) {
       try {
         const result = await this.queryNtp(server, 123, 2500);
-        this.offsetMs = result.offset;
-        this.rttMs = result.rtt;
-        this.lastSyncSource = `NTP (${server})`;
-        this.synchronized = true;
-        this.lastSyncTime = new Date();
-        this.logger.log(`✓ زمان با ${this.lastSyncSource} کالیبره شد (انحراف: ${this.offsetMs}ms, پینگ: ${this.rttMs}ms)`);
+        this.commitSample(revision, result.offset, result.rtt, `NTP (${server})`);
         return this.getStatus();
       } catch {
         // سرور بعدی را تست می‌کنیم
       }
     }
 
-    // مرحله ۲: در صورت مسدود بودن پورت UDP 123، استفاده از HTTP Date
     for (const httpUrl of this.defaultHttpServers) {
       try {
         const result = await this.queryHttpDate(httpUrl, 3000);
-        this.offsetMs = result.offset;
-        this.rttMs = result.rtt;
-        this.lastSyncSource = `HTTP (${new URL(httpUrl).hostname})`;
-        this.synchronized = true;
-        this.lastSyncTime = new Date();
-        this.logger.log(`✓ زمان با ${this.lastSyncSource} کالیبره شد (انحراف: ${this.offsetMs}ms, پینگ: ${this.rttMs}ms)`);
+        const source = `HTTP (${new URL(httpUrl).hostname})`;
+        this.commitSample(revision, result.offset, result.rtt, source);
         return this.getStatus();
       } catch {
         // سرور بعدی
       }
     }
 
+    if (this.revision === revision) {
+      const failed = applySyncFailure(this.getStatus());
+      this.synchronized = failed.synchronized;
+    }
     this.logger.warn('⚠ همگام‌سازی زمان ناموفق بود؛ از ساعت محلی سیستم استفاده می‌شود.');
     return this.getStatus();
   }
@@ -67,6 +78,14 @@ export class NestTimeSyncService {
 
   public getExactNow(): Date {
     return new Date(this.getExactTimestampMs());
+  }
+
+  public adoptStatus(status: TimeSyncStatus): void {
+    this.offsetMs = status.offsetMs;
+    this.rttMs = status.rttMs;
+    this.lastSyncSource = status.source;
+    this.synchronized = status.synchronized;
+    this.lastSyncTime = status.lastSyncTime ? new Date(status.lastSyncTime) : null;
   }
 
   public getStatus(): TimeSyncStatus {
@@ -80,12 +99,24 @@ export class NestTimeSyncService {
   }
 
   public setManualOffset(offsetMs: number): TimeSyncStatus {
+    this.revision += 1;
     this.offsetMs = offsetMs;
     this.synchronized = true;
     this.lastSyncSource = 'تنظیم دستی کاربر';
     this.lastSyncTime = new Date();
     this.logger.log(`انحراف دستی زمان تنظیم شد: ${offsetMs}ms`);
     return this.getStatus();
+  }
+
+  private commitSample(revision: number, offset: number, rtt: number, source: string): boolean {
+    if (this.revision !== revision) return false;
+    this.offsetMs = offset;
+    this.rttMs = rtt;
+    this.lastSyncSource = source;
+    this.synchronized = true;
+    this.lastSyncTime = new Date();
+    this.logger.log(`✓ زمان با ${this.lastSyncSource} کالیبره شد (انحراف: ${this.offsetMs}ms, پینگ: ${this.rttMs}ms)`);
+    return true;
   }
 
   private queryNtp(host: string, port = 123, timeoutMs = 2500): Promise<{ offset: number; rtt: number }> {

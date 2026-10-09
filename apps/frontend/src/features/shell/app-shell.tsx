@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Zap } from 'lucide-react';
 import type { SniperState, TimeSyncStatus } from '@saf-shekan/core';
 import { Button } from '@/components/ui/button';
+import { HeaderActions } from '@/features/shell/header-actions';
 import { isEngineHot } from '@/lib/engine-state';
 import { formatSignedMs, latencyClass } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -46,7 +47,7 @@ export function AppShell({
 }) {
   const pathname = usePathname() || '/';
   const hot = isEngineHot(engineState);
-  const ping = timeSync?.rttMs ?? 0;
+  const sample = timeSync?.synchronized === true ? timeSync : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070b14] text-slate-100">
@@ -91,20 +92,29 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden items-center gap-2.5 rounded-lg border border-white/10 bg-white/3 px-3 py-1.5 text-[11px] md:flex">
-              <span className={hot ? 'font-bold text-amber-400' : 'font-bold text-emerald-400'}>
-                {STATE_LABEL[engineState]}
+              <span
+                className={
+                  !connected
+                    ? 'font-bold text-rose-400'
+                    : hot
+                      ? 'font-bold text-amber-400'
+                      : 'font-bold text-emerald-400'
+                }
+              >
+                {connected ? STATE_LABEL[engineState] : 'قطع اتصال'}
               </span>
               <span className="text-white/20">|</span>
               <span className="text-slate-500">PING:</span>
-              <span className={cn('num-mono font-bold', latencyClass(ping))} dir="ltr">
-                {ping > 0 ? `${Math.round(ping)}ms` : '—'}
+              <span className={cn('num-mono font-bold', sample ? latencyClass(sample.rttMs) : 'text-slate-400')} dir="ltr">
+                {sample ? `${Math.round(sample.rttMs)}ms` : '—'}
               </span>
               <span className="text-white/20">|</span>
               <span className="text-slate-500">NTP Offset:</span>
-              <span className="num-mono font-bold text-cyan-400" dir="ltr">
-                {timeSync ? formatSignedMs(timeSync.offsetMs) : '—'}
+              <span className={cn('num-mono font-bold', sample ? 'text-cyan-400' : 'text-slate-400')} dir="ltr">
+                {sample ? formatSignedMs(sample.offsetMs) : '—'}
               </span>
             </div>
+            <HeaderActions />
             {hot ? (
               <Button type="button" variant="destructive" size="sm" onClick={onDisarm}>
                 توقف اضطراری

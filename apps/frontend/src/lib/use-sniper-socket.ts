@@ -20,11 +20,22 @@ export function useSniperSocket() {
   const [quotesBySymbol, setQuotesBySymbol] = useState<Record<string, LiveQuote>>({});
 
   const timeSyncRef = useRef<TimeSyncStatus | null>(null);
+  const liveTimeSyncRef = useRef(false);
   const lastTickRef = useRef(0);
 
   useEffect(() => {
     timeSyncRef.current = timeSync;
   }, [timeSync]);
+
+  const applyHttpTimeSync = useCallback((status: TimeSyncStatus) => {
+    if (liveTimeSyncRef.current) return;
+    setTimeSync(status);
+  }, []);
+
+  const applyLiveTimeSync = useCallback((status: TimeSyncStatus) => {
+    liveTimeSyncRef.current = true;
+    setTimeSync(status);
+  }, []);
 
   const clearLogs = useCallback(() => setLogs([]), []);
   const addLog = useCallback((entry: Omit<LogEntry, 'id'>) => {
@@ -91,6 +102,7 @@ export function useSniperSocket() {
             ...prev.slice(0, 199),
           ]);
         } else if (message.type === 'TIME_SYNC') {
+          liveTimeSyncRef.current = true;
           setTimeSync(message.data as TimeSyncStatus);
         } else if (message.type === 'SNIPER_SUMMARY') {
           const data = message.data as { results?: ShotResult[] };
@@ -136,6 +148,8 @@ export function useSniperSocket() {
     shots,
     timeSync,
     setTimeSync,
+    applyHttpTimeSync,
+    applyLiveTimeSync,
     quotesBySymbol,
     clearLogs,
     addLog,

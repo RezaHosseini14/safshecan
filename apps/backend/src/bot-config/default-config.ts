@@ -36,6 +36,7 @@ export const DEFAULT_CONFIG: BotConfig = {
     burstIntervalMs: 40,
     preWarmSeconds: 12,
     stopOnFirstSuccess: true,
+    ntpSyncIntervalMs: 15000,
   },
   serverPort: 3000,
   autoOpenBrowser: false,

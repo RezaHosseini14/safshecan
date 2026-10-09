@@ -1,18 +1,22 @@
 import { ConfigService } from '@nestjs/config';
+import type { TimeSyncStatus } from '@saf-shekan/core';
 import { createNestApp } from './bootstrap.js';
 import { BotConfigService } from './bot-config/bot-config.service.js';
 import { NestTimeSyncService } from './clock/time-sync.service.js';
+import { TimeSyncScheduler } from './clock/time-sync.scheduler.js';
 
 export async function bootstrap() {
   const maxAttempts = 20;
   let lastError: unknown;
   let desiredPort = 3000;
+  let seeded: TimeSyncStatus | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const app = await createNestApp();
     const env = app.get(ConfigService);
     const configService = app.get(BotConfigService);
     const timeSyncService = app.get(NestTimeSyncService);
+    const scheduler = app.get(TimeSyncScheduler);
     const envPort = Number(env.get('PORT'));
     const port =
       (Number.isFinite(envPort) && envPort > 0 ? envPort : 0) ||
@@ -21,10 +25,14 @@ export async function bootstrap() {
     desiredPort = port;
 
     try {
-      if (attempt === 1) {
-        await timeSyncService.sync();
+      if (!seeded) {
+        seeded = await timeSyncService.sync();
+      } else {
+        timeSyncService.adoptStatus(seeded);
       }
       await app.listen(port);
+      scheduler.broadcast(timeSyncService.getStatus());
+      scheduler.start();
       return { app, port };
     } catch (err: unknown) {
       lastError = err;

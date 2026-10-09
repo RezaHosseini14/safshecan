@@ -49,7 +49,7 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
     setTimeout(() => setToast(null), 3200);
   };
 
-  const { setEngineState, setTimeSync } = socket;
+  const { setEngineState, applyHttpTimeSync, applyLiveTimeSync } = socket;
 
   useEffect(() => {
     api
@@ -57,10 +57,10 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
       .then((res) => {
         if (res.config) setConfig(res.config);
         if (res.state) setEngineState(res.state);
-        if (res.timeSync) setTimeSync(res.timeSync);
+        if (res.timeSync) applyHttpTimeSync(res.timeSync);
       })
       .catch(() => notify('وضعیت سرور خوانده نشد'));
-  }, [setEngineState, setTimeSync]);
+  }, [setEngineState, applyHttpTimeSync]);
 
   const saveOrder = (patch: Partial<OrderConfig>) => {
     const updated = { ...config, order: { ...config.order, ...patch } };
@@ -83,7 +83,7 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
           api
             .syncTime()
             .then((res) => {
-              socket.setTimeSync(res.status);
+              applyLiveTimeSync(res.status);
               notify(`زمان با انحراف ${res.status.offsetMs}ms کالیبره شد`);
             })
             .catch((err: unknown) => notify(err instanceof Error ? err.message : 'خطا در همگام‌سازی'));
@@ -93,7 +93,7 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
           api
             .setTimeOffset(next)
             .then((res) => {
-              socket.setTimeSync(res.status);
+              applyLiveTimeSync(res.status);
               notify(`انحراف زمانی روی ${next}ms تنظیم شد`);
             })
             .catch((err: unknown) => notify(err instanceof Error ? err.message : 'خطا در آفست'));

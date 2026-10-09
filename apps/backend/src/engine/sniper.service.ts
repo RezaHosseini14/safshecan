@@ -30,6 +30,16 @@ export class SniperService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
+    this.gateway.setConnectionListener((client) => {
+      this.gateway.send(client, {
+        type: 'STATE_CHANGE',
+        data: { state: this.engine.getState() },
+      });
+      this.gateway.send(client, {
+        type: 'TIME_SYNC',
+        data: this.timeSync.getStatus(),
+      });
+    });
     this.clockInterval = setInterval(() => {
       if (this.gateway.getConnectedClientsCount() === 0) return;
       const exactNow = this.timeSync.getExactNow();
@@ -47,6 +57,7 @@ export class SniperService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
+    this.gateway.setConnectionListener(null);
     if (this.clockInterval) {
       clearInterval(this.clockInterval);
       this.clockInterval = null;

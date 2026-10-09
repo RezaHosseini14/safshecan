@@ -19,13 +19,24 @@ export class SniperGateway
   server!: WsServer;
 
   private readonly logger = new Logger(SniperGateway.name);
+  private onConnect: ((client: WebSocket) => void) | null = null;
 
   afterInit() {
     this.logger.log('✓ درگاه وب‌سوکت صف‌شکن (SniperGateway) راه‌اندازی شد (/ws).');
   }
 
+  public setConnectionListener(listener: ((client: WebSocket) => void) | null): void {
+    this.onConnect = listener;
+  }
+
+  public send(client: WebSocket, message: ServerBroadcastMessage): void {
+    if (client.readyState !== WebSocket.OPEN) return;
+    client.send(JSON.stringify(message));
+  }
+
   handleConnection(client: WebSocket) {
     this.logger.log('یک اتصال کلاینت وب‌سوکت جدید برقرار شد.');
+    this.onConnect?.(client);
   }
 
   handleDisconnect(client: WebSocket) {

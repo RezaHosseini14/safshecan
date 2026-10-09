@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { JetBrains_Mono, Vazirmatn } from 'next/font/google';
+import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
 const vazirmatn = Vazirmatn({
@@ -29,8 +30,15 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fa" dir="rtl" className={`dark ${vazirmatn.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen antialiased">{children}</body>
+    <html
+      lang="fa"
+      dir="rtl"
+      className={`${vazirmatn.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="min-h-screen antialiased" suppressHydrationWarning>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
