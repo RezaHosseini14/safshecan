@@ -11,4 +11,5 @@ Thumbs.db
 .agents/
 apps/backend/config.json
 /config.json
+docker/certs/
 .cursor/mcp.json

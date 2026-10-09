@@ -211,7 +211,6 @@ jobs:
           ssh -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}/docker"
           scp docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
           scp docker/nginx.conf "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker/nginx.conf"
-          scp docker/nginx-entrypoint.sh "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker/nginx-entrypoint.sh"
           # Ensure persistent config.json exists (do not overwrite if present)
           ssh "$SSH_USER@$SSH_HOST" "test -f ${{ env.REMOTE_DIR }}/config.json || echo '{}' > ${{ env.REMOTE_DIR }}/config.json"
 
@@ -252,14 +251,56 @@ jobs:
           # Stop legacy published ports if still running (api:3880 / old frontend:3000)
           docker rm -f saf-shekan-api saf-shekan-web 2>/dev/null || true
 
+          mkdir -p docker/certs
+          if [ ! -s docker/certs/server.crt ] || [ ! -s docker/certs/server.key ]; then
+            echo "--> Creating the self-signed TLS certificate on the host..."
+            openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+              -keyout docker/certs/server.key \
+              -out docker/certs/server.crt \
+              -subj "/CN=${TLS_HOST:-5.159.49.36}" \
+              -addext "subjectAltName=IP:${TLS_HOST:-5.159.49.36}"
+          fi
+
           echo "--> Pulling latest container images..."
-          docker compose pull
+          pulled=0
+          for attempt in 1 2 3 4 5; do
+            if docker compose pull; then
+              pulled=1
+              break
+            fi
+            echo "compose pull failed (attempt ${attempt}), retrying..."
+            sleep $((attempt * 4))
+          done
+          if [ "$pulled" != 1 ]; then
+            echo "::error::docker compose pull failed after 5 attempts"
+            exit 1
+          fi
 
           echo "--> Applying rolling update (nginx + backend + frontend)..."
-          docker compose up -d --remove-orphans
+          if ! docker compose up -d --remove-orphans --wait --wait-timeout 180; then
+            echo "::error::docker compose up failed"
+            docker compose ps || true
+            docker logs saf-shekan-nginx --tail 80 || true
+            exit 1
+          fi
 
+          # compose up does not reload an already-running nginx when only the
+          # mounted config changed. Wait until the master process exists; a
+          # reload during apk/openssl startup used to fail this step in ~8s.
           echo "--> Reloading nginx so the mounted config is applied..."
-          docker exec saf-shekan-nginx nginx -s reload
+          reloaded=0
+          for attempt in $(seq 1 20); do
+            if docker exec saf-shekan-nginx nginx -s reload; then
+              reloaded=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$reloaded" != 1 ]; then
+            echo "::error::nginx did not accept reload"
+            docker logs saf-shekan-nginx --tail 80 || true
+            exit 1
+          fi
 
           echo "--> Cleaning up unused dangling images..."
           docker image prune -f || true

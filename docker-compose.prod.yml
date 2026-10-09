@@ -60,13 +60,9 @@ services:
     restart: unless-stopped
     ports:
       - "3000:443"
-    environment:
-      - TLS_HOST=${TLS_HOST:-5.159.49.36}
-    entrypoint: ["/bin/sh", "/docker-entrypoint-saf.sh"]
     volumes:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./docker/nginx-entrypoint.sh:/docker-entrypoint-saf.sh:ro
-      - nginx-certs:/etc/nginx/certs
+      - ./docker/certs:/etc/nginx/certs:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -84,6 +80,3 @@ services:
 networks:
   safshekan-net:
     driver: bridge
-
-volumes:
-  nginx-certs:
