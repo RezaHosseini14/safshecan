@@ -1,0 +1,8 @@
+---
+description: Keep README and DEPLOYMENT in sync with behavior changes.
+alwaysApply: false
+---
+
+# Documentation
+
+User-facing behavior changes update `README.md` or `DEPLOYMENT.md` in the same change. Do not add a new docs tree for a small fix.

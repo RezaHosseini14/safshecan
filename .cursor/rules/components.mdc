@@ -1,0 +1,11 @@
+---
+description: Where frontend components live. Not a visual system.
+globs: "apps/frontend/**/*.tsx"
+alwaysApply: false
+---
+
+# Components
+
+- Pages in `apps/frontend/src/app`. Feature UI in `apps/frontend/src/features/*`. Primitives only in `components/ui`.
+- Named exports. A feature owns its components and hooks. Share only through `src/lib`, `components/ui`, and `@saf-shekan/core`.
+- Do not copy ZARVA components (`KpiGrid`, `DashboardPanel`, `DomainListPage`, `StatusBadge`, `.zarva-*`).

@@ -1,0 +1,12 @@
+---
+description: Monorepo layers — frontend, backend, core.
+alwaysApply: false
+---
+
+# Architecture
+
+- `apps/frontend` — Next.js UI only. Calls the backend; no broker HTTP from the browser
+- `apps/backend` — Nest modules: controller → service. Sniper, brokers, time-sync, connection pool stay in their modules
+- `packages/core` — shared types, fee math, queue estimate, trading-session constants
+- `apps/cli` — terminal client of the same core. Do not fork fee or queue formulas
+- No circular imports. Named exports

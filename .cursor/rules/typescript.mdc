@@ -1,0 +1,17 @@
+---
+description: TypeScript — I-interfaces, no any, shared types in core.
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# TypeScript
+
+Prefer `interface` for object shapes, prefixed with `I` when the shape is a new public contract (`IOrderFormProps`). Domain models that already live in `@saf-shekan/core` keep their existing names (`OrderConfig`, `SniperState`, `BotConfig`) — do not rename them.
+
+Use `type` for unions and aliases (`SniperState`, `BrokerType`).
+
+Never `any` or `as any`. Use `unknown` and narrow, or Zod parse.
+
+Shared order, timing, broker, and fee types belong in `@saf-shekan/core`. Feature-local props stay next to the component.
+
+Nest DTOs mirror core interfaces. Do not duplicate a second order model in the frontend.

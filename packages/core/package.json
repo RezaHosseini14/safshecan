@@ -15,11 +15,13 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",
+    "test": "vitest run",
     "clean": "rimraf dist"
   },
   "devDependencies": {
     "@saf-shekan/tsconfig": "workspace:*",
     "rimraf": "^6.0.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.3"
   }
 }

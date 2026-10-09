@@ -1,0 +1,17 @@
+---
+description: Broker secrets, cookies, and engine safety.
+alwaysApply: false
+---
+
+# Security
+
+- Validate DTOs (`class-validator`). Helmet + CORS + throttler stay on
+- Broker cookies, bearer tokens, and cURL dumps are secrets. Never log them, never commit them, never render them back in full
+- Persist secrets only in the local config path the backend already uses (`apps/backend/config.json`, gitignored)
+- `GET /api/status` and other config responses replace cookie and Authorization values with `[redacted]`. Saving that placeholder must keep the secret already on disk
+- Emergency stop must stay reachable while the engine is armed or firing. `POST /api/sniper/disarm` stays outside the rate limit
+- Do not weaken rate limits on order or broker endpoints
+- This app is a single-operator local engine. Do not add JWT, RBAC, or multi-user auth because a generic OWASP skill asks for it
+- The frontend masks cookie, Authorization, and cURL secrets before render. A `[redacted]` placeholder is not saved back as a new secret
+- Order and timing input is validated with Zod before save. Broker target URLs are `https` only
+- Broker response text is shown as text, never injected as HTML

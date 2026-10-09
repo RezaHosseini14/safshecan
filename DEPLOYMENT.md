@@ -1,118 +1,117 @@
-# 🚀 راهنمای استقرار و پایپ‌لاین CI/CD صف‌شکن (SafShekan)
+# راهنمای استقرار و پایپ‌لاین CI/CD صف‌شکن (SafShekan)
 
-پروژه **صف‌شکن** مجهز به یک پایپ‌لاین CI/CD کاملاً خودکار، امن، Enterprise و بدون Downtime بر بستر **GitHub Actions**، **GitHub Container Registry (GHCR)** و **Docker Compose** است.
+پروژه **صف‌شکن** مجهز به پایپ‌لاین CI/CD خودکار بر بستر **GitHub Actions**، **GitHub Container Registry (GHCR)**، **Docker Compose** و **nginx** به‌عنوان gateway عمومی است.
 
 ---
 
-## 🏗 معماری استقرار (CI/CD Architecture)
+## معماری استقرار
 
 ```mermaid
-flowchart TD
-    subgraph GitHub
-        A[Git Push / PR] --> B[🧪 Quality Gate: Lint + Test + Build]
-        B --> C[🐳 Docker Buildx: API & Web]
-        C --> D[📦 Push to GHCR: ghcr.io]
-    end
-
-    subgraph VPS ["Production VPS (5.159.49.36)"]
-        D --> E[🔑 SSH Deployment Action]
-        E --> F[📥 Pull from GHCR in /opt/saf-shekan]
-        F --> G[🔄 Zero-Downtime Rolling Update]
-        G --> H[🩺 Health Check: Web & API]
-        H --> I[🧹 Prune Dangling Images]
-        I --> J[🎉 Systemd Active: saf-shekan.service]
-    end
+flowchart LR
+  Browser --> Nginx[":3000 nginx"]
+  Nginx -->|"/api /ws"| Backend
+  Nginx -->|"/"| Frontend
+  GHCR --> Deploy[SSH Deploy]
+  Deploy --> VPS["/opt/saf-shekan"]
 ```
 
+| لایه | نقش |
+|------|-----|
+| **nginx** | تنها پورت عمومی `:3000` — پروکسی `/api` و `/ws` به backend، `/` به frontend |
+| **backend** | NestJS engine (فقط داخل Docker network) |
+| **frontend** | Next.js dashboard (فقط داخل Docker network) |
+
+> نکته: Next.js `rewrites` برای WebSocket قابل‌اعتماد نیست؛ به همین دلیل nginx gateway اجباری است.
+
 ---
 
-## 🌐 مشخصات سرور و پورت‌ها
+## مشخصات سرور و پورت‌ها
 
 - **آدرس سرور:** `5.159.49.36`
-- **پورت داشبورد وب:** `http://5.159.49.36:3000`
-- **پورت ای‌پی‌آی و وب‌سوکت:** `http://5.159.49.36:3880`
-- **مستندات تعاملی Swagger:** `http://5.159.49.36:3880/api/docs`
-- **بررسی سلامت API (Health Check):** `http://5.159.49.36:3880/api/health`
+- **پورت عمومی (nginx → frontend + پروکسی API/WS):** `http://5.159.49.36:3000`
+- **مستندات Swagger:** `http://5.159.49.36:3000/api/docs`
+- **Health Check:** `http://5.159.49.36:3000/api/health`
 - **مسیر پروژه در سرور:** `/opt/saf-shekan`
+- پورت قدیمی `3880` دیگر استفاده نمی‌شود (همه از پشت nginx روی `:3000`).
 
 ---
 
-## 🔑 تنظیم Secretهای گیت‌هاب (GitHub Secrets)
+## تنظیم Secretهای گیت‌هاب
 
-برای فعال‌سازی کامل فرآیند استقرار خودکار پس از هر `git push` به شاخه `main` یا `master`، به بخش **Settings > Secrets and variables > Actions** در ریپازیتوری گیت‌هاب خود رفته و مقادیر زیر را وارد کنید:
+مسیر: **Settings → Secrets and variables → Actions**
 
-| نام Secret | مقدار پیشنهادی | توضیحات |
+| نام Secret | مقدار | الزامی |
 |---|---|---|
-| `SSH_HOST` | `5.159.49.36` | آی‌پی سرور پروداکشن |
-| `SSH_USER` | `root` | نام کاربری سرور |
-| `SSH_PRIVATE_KEY` | *(کلید خصوصی ایجاد شده در زیر)* | کلید اختصاصی Ed25519 که در سرور Authorize شده است |
-| `GHCR_PULL_TOKEN` | *(اختیاری)* | توکن دسترسی خواندن ایمیج‌ها (در صورتی که ایمیج Private باشد) |
+| `SSH_HOST` | `5.159.49.36` | بله |
+| `SSH_USER` | `root` | بله |
+| `SSH_PRIVATE_KEY` | محتوای کلید خصوصی Ed25519 | بله |
+| `GHCR_PULL_TOKEN` | PAT با scope `read:packages` | بله (برای `docker login` روی VPS؛ `GITHUB_TOKEN` روی سرور کار نمی‌کند) |
 
-### 🔐 کلید اختصاصی SSH Deploy Key:
+### کلید SSH Deploy
 
-کلید خصوصی اختصاصی بر روی سیستم شما در مسیر زیر ذخیره شده است و باید محتوای آن در بخش Secrets گیت‌هاب قرار گیرد:
+کلید خصوصی محلی:
 
 ```text
 ~/.ssh/id_ed25519_safshekan
 ```
 
-کلید عمومی متناظر آن نیز با موفقیت در فایل `/root/.ssh/authorized_keys` سرور قرار گرفته است.
+کلید عمومی باید در `/root/.ssh/authorized_keys` سرور باشد. Environment به نام `production` در GitHub (برای job deploy) در صورت نیاز از Settings → Environments ساخته شود.
 
 ---
 
-## ⚡ روش‌های استقرار (Deployment Methods)
+## روش‌های استقرار
 
-### ۱. استقرار خودکار با GitHub Actions (پیشنهادی)
-با هر پوش به ریپازیتوری، پایپ‌لاین `.github/workflows/ci-cd.yml` به صورت خودکار:
-1. تمام تست‌ها، لنت‌ها و بیلد مونو‌ریپو را اعتبارسنجی می‌کند.
-2. ایمیج‌های داکر `@saf-shekan/api` و `@saf-shekan/web` را در GHCR می‌سازد و کش لایه‌ها را بهینه‌سازی می‌کند.
-3. از طریق SSH به سرور متصل شده، ایمیج‌های جدید را پول و کانتینرها را بدون قطعی ری‌استارت می‌کند.
-4. سلامت سرویس‌ها را با تست زنده پایش کرده و گزارش خلاصه ارسال می‌نماید.
+### ۱. GitHub Actions (پیشنهادی)
 
----
+فایل: `.github/workflows/ci-cd.yml`
 
-### ۲. استقرار با یک دستور از سیستم شخصی (Direct CLI Deploy)
-شما می‌توانید در هر لحظه مستقیماً از ترمینال لوکال خود پروژه را بیلد و روی سرور مستقر کنید:
+با هر push به `main`/`master` یا `workflow_dispatch`:
+
+1. **validate** — lint + test + build
+2. **build-backend / build-frontend** — build & push به GHCR
+3. **deploy** — sync `docker-compose.yml` + `docker/nginx.conf`، pull ایمیج‌ها، `compose up`، health check روی `:3000`
+
+ایمیج‌ها:
+
+- `ghcr.io/<owner>/safshecan-backend:<sha>` / `:latest`
+- `ghcr.io/<owner>/safshecan-frontend:<sha>` / `:latest`
+
+### ۲. استقرار مستقیم از لوکال
 
 ```bash
 pnpm run deploy:remote
 ```
 
-این دستور به صورت خودکار:
-- سورس‌کد را فشرده و به سرور منتقل می‌کند.
-- ایمیج‌های داکر را در سرور کامپایل می‌نماید.
-- کانتینرها را ری‌استارت کرده و وضعیت سلامت را بررسی می‌کند.
+احراز هویت: `SSH_PRIVATE_KEY` یا فایل `~/.ssh/id_ed25519_safshekan` (اختیاری: `SSH_PASSWORD` از env — هرگز در کد هاردکد نشود).
 
----
+این دستور سورس را آپلود می‌کند، ایمیج‌ها را روی سرور build می‌کند، nginx gateway را بالا می‌آورد و health را چک می‌کند.
 
-### ۳. مدیریت مستقیم روی سرور (Server Management)
-
-اگر وارد سرور شدید (`ssh root@5.159.49.36`):
+### ۳. مدیریت روی سرور
 
 ```bash
-# رفتن به پوشه پروژه
+ssh root@5.159.49.36
 cd /opt/saf-shekan
-
-# اجرای اسکریپت استقرار سریع
-./deploy.sh
-
-# بررسی سلامت سرویس‌ها
-./healthcheck.sh
-
-# مشاهده لاگ‌های زنده
+docker compose ps
 docker compose logs -f
-
-# وضعیت سرویس خودکار سیستم‌دی
-systemctl status saf-shekan.service
+curl -sf http://127.0.0.1:3000/api/health
 ```
 
 ---
 
-## 🛡 تنظیمات پایدار و کانفیگ (Persistence)
-
-تنظیمات ربات، توکن‌های کارگزاری، نماد هدف و تنظیمات سرخطی در فایل زیر نگهداری می‌شوند و هنگام ری‌استارت یا دیپلوی کانتینرها پایدار می‌مانند:
+## پایداری کانفیگ
 
 ```text
 /opt/saf-shekan/config.json
 ```
-همچنین سرویس به گونه‌ای تنظیم شده که با ریبوت سرور از طریق `saf-shekan.service` به صورت خودکار مجدداً راه‌اندازی شود.
+
+این فایل به `apps/backend/config.json` داخل کانتینر mount می‌شود و بین دیپلوی‌ها حفظ می‌ماند. در گیت نیست؛ شکل بدون راز در `apps/backend/config.example.json` است. کش نماد در `apps/backend/data` است. `GET /api/status` کوکی و `Authorization` را برنمی‌گرداند.
+
+---
+
+## Smoke test بعد از دیپلوی
+
+```bash
+curl -sf http://5.159.49.36:3000/api/health   # باید JSON status=ok برگرداند
+curl -sf http://5.159.49.36:3000/              # داشبورد
+# در مرورگر: ساعت اتمی باید از 00:00:00 خارج شود و WS وصل باشد
+```

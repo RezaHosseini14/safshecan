@@ -1,0 +1,30 @@
+{
+  "order": {
+    "symbol": "عرضه_اولیه",
+    "price": 10000,
+    "quantity": 100,
+    "side": "BUY",
+    "brokerType": "custom"
+  },
+  "network": {
+    "targetUrl": "https://onlineplus.examplebroker.ir/api/Order/SendOrder",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyTemplate": "{\"symbol\":\"{{symbol}}\",\"price\":\"{{price}}\",\"quantity\":\"{{quantity}}\"}",
+    "cookies": ""
+  },
+  "timing": {
+    "targetTime": "08:45:00.000",
+    "leadTimeMs": 15,
+    "burstCount": 8,
+    "burstIntervalMs": 40,
+    "preWarmSeconds": 12,
+    "stopOnFirstSuccess": true
+  },
+  "serverPort": 3000,
+  "autoOpenBrowser": false,
+  "soundAlertEnabled": true,
+  "ntpServers": ["ir.pool.ntp.org", "time.google.com", "pool.ntp.org"]
+}

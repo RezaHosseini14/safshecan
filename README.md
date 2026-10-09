@@ -21,14 +21,14 @@ saf-shekan/
 │   └── workflows/
 │       └── ci.yml                 # پایپ‌لاین CI در گیت‌هاب با کش هوشمند توربو
 ├── apps/
-│   ├── api/                       # سرویس بک‌اند سازمانی بر پایه NestJS 12
+│   ├── backend/                   # سرویس بک‌اند سازمانی بر پایه NestJS 12
 │   │   ├── src/                   # موتور معاملاتی، اتصال وب‌سوکت، سرور REST، درگاه کارگزاری‌ها
 │   │   ├── test/                  # مجموعه تست‌های یکپارچه E2E
-│   │   └── package.json           # @saf-shekan/api
-│   ├── web/                       # رابط کاربری نسل نوین با Next.js 16 و Tailwind CSS v4
+│   │   └── package.json           # @saf-shekan/backend
+│   ├── frontend/                  # رابط کاربری نسل نوین با Next.js 16 و Tailwind CSS v4
 │   │   ├── src/                   # کامپوننت‌های رادیکس، داشبورد شیشه‌ای، مانیتور صف، نمودارها
 │   │   ├── test/                  # تست‌های رابط کاربری با Vitest
-│   │   └── package.json           # @saf-shekan/web
+│   │   └── package.json           # @saf-shekan/frontend
 │   └── cli/                       # ابزار تعاملی و پرسرعت خط فرمان ترمینال (Terminal CLI)
 │       ├── src/                   # شبیه‌ساز سفارش، تست پینگ، برآورد صف، محاسبه کارمزد
 │       └── package.json           # @saf-shekan/cli
@@ -50,13 +50,15 @@ saf-shekan/
 │       ├── index.js
 │       └── package.json           # @saf-shekan/eslint-config
 ├── docker/
-│   ├── Dockerfile.api             # داکر ایمیج سبک و چندمرحله‌ای برای سرور بک‌اند
-│   └── Dockerfile.web             # داکر ایمیج بهینه‌شده برای داشبورد وب
+│   ├── Dockerfile.backend         # داکر ایمیج سبک و چندمرحله‌ای برای سرور بک‌اند
+│   └── Dockerfile.frontend        # داکر ایمیج بهینه‌شده برای داشبورد فرانت‌اند
 ├── docker-compose.yml             # ترکیب و راه‌اندازی هم‌زمان سرویس‌ها با داکر کامپوز
 ├── pnpm-workspace.yaml            # تعریف ورک‌اسپیس‌های pnpm
 ├── turbo.json                     # پایپ‌لاین وظایف توربورپو با کش فوق‌سریع
 └── package.json                   # هماهنگ‌کننده روت مونوریپو
 ```
+
+بک‌اند Nest زیر `apps/backend/src` به قابلیت‌ها تقسیم شده است: `engine` (دامنه شلیک بدون Nest)، `clock`، `network`، `brokerage`، `market`، `realtime`، `bot-config`. راز کارگزاری فقط در `apps/backend/config.json` می‌ماند و این فایل در گیت نیست. `GET /api/status` مقدار کوکی و `Authorization` را با `[redacted]` عوض می‌کند. کش نماد در `apps/backend/data` نوشته می‌شود.
 
 ---
 
@@ -75,16 +77,17 @@ saf-shekan/
 
 | دستور | توضیحات |
 | :--- | :--- |
-| `pnpm dev` | اجرای هم‌زمان محیط توسعه برای API و Web با توربورپو |
-| `pnpm dev:api` | اجرای محیط توسعه فقط برای سرور بک‌اند NestJS |
-| `pnpm dev:web` | اجرای محیط توسعه فقط برای داشبورد فرانت‌اند Next.js |
+| `pnpm dev` | اجرای فقط API بک‌اند NestJS روی پورت `3000` |
+| `pnpm dev:backend` | اجرای محیط توسعه فقط برای سرور بک‌اند NestJS |
+| `pnpm dev:frontend` | اجرای Next.js به‌تنهایی (HMR) |
+| `pnpm dev:ui` | توسعه با HMR فرانت روی `:3000` و backend داخلی روی `:3001` (پیشنهادی برای UI) |
 | `pnpm build` | کامپایل کامل پکیج‌ها با خط لوله Turborepo و کش هوشمند |
-| `pnpm build:full` | ساخت پکیج نهایی و خروجی استاتیک وب و پیوند با توزیع سرور |
+| `pnpm build:full` | بیلد core + backend و کپی داده TSE (بدون embed فرانت؛ UI در `apps/frontend`) |
 | `pnpm test` | اجرای تمامی تست‌های واحد و E2E در سراسر ورک‌اسپیس‌ها |
-| `pnpm test:api` | اجرای تست‌های E2E مربوط به سرور بک‌اند و انجین سرخطی |
-| `pnpm test:web` | اجرای تست‌های کامپوننت‌های فرانت‌اند |
+| `pnpm test:backend` | اجرای تست‌های E2E مربوط به سرور بک‌اند و انجین سرخطی |
+| `pnpm test:frontend` | اجرای تست‌های کامپوننت‌های فرانت‌اند |
 | `pnpm cli` | اجرای ابزار تعاملی خط فرمان در ترمینال |
-| `pnpm start` | اجرای نسخه نهایی سرور سرخطی بر روی پورت `3880` |
+| `pnpm start` | اجرای نسخه نهایی API بک‌اند روی پورت `3000` |
 | `pnpm clean` | پاکسازی بیلدها و کش پروژه‌ها |
 
 ---
@@ -118,14 +121,15 @@ pnpm cli presets
 docker compose up -d --build
 
 # بررسی لاگ‌های زنده سرور
-docker compose logs -f api
+docker compose logs -f
 
 # متوقف کردن کانتینرها
 docker compose down
 ```
 
-- سرویس API: `http://localhost:3880`
-- داشبورد Web: `http://localhost:3000`
+- داشبورد (frontend): `http://localhost:3000`
+- API از طریق پروکسی فرانت/nginx: `http://localhost:3000/api/...`
+- Swagger: `http://localhost:3000/api/docs`
 
 ---
 

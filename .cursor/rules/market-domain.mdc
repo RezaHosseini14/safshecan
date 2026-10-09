@@ -1,0 +1,16 @@
+---
+description: TSE sniper domain — prices, fees, time, queue. Replaces a jewelry gold-domain.
+alwaysApply: false
+---
+
+# Market domain
+
+This is the domain rule (the role `gold-domain` plays in ZARVA). Subject is Tehran equities and IPO sniping, not karat or jewelry invoices.
+
+- Money is Rial in the engine. Show Toman only as a display conversion (`amount / 10`), labeled. Never mix the two in one stored field
+- Prices and quantities are integers. Do not invent a last trade, NAV, or queue position without `tsetmc` / the broker response
+- Fees and breakeven go through `@saf-shekan/core` fee calculator. Do not reimplement buy/sell commission in the UI
+- Timing uses `SniperTimingConfig`: `targetTime`, `leadTimeMs`, `burstCount`, `burstIntervalMs`, pre-warm. Clock offset comes from time-sync, not `Date.now()` guesses in the UI
+- `antiDoubleSpend` and `stopOnFirstSuccess` are safety switches. Do not fire a second logical order after a confirmed fill
+- Engine states are only `IDLE | ARMED | PRE_WARMING | FIRING | COMPLETED | CANCELLED | ERROR`
+- Broker presets stay in the backend broker module. A new broker needs a preset plus DTO validation, not a one-off fetch in a component

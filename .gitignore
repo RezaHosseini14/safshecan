@@ -9,3 +9,6 @@ coverage/
 .DS_Store
 Thumbs.db
 .agents/
+apps/backend/config.json
+/config.json
+.cursor/mcp.json

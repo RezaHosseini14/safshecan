@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: safshecan-${{ github.ref }}
-  cancel-in-progress: false
+  group: safshekan-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -24,9 +24,9 @@ jobs:
   # STAGE 1: Quality Gate, Lint & Tests
   # ==========================================
   validate:
-    name: 🧪 Quality Gate (Build, Lint & Test)
+    name: Quality Gate (Build, Lint & Test)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -56,10 +56,10 @@ jobs:
         run: pnpm build
 
   # ==========================================
-  # STAGE 2A: Build & Push API Image
+  # STAGE 2A: Build & Push Backend Image
   # ==========================================
-  build-api:
-    name: 🐳 Docker API (Build & GHCR Push)
+  build-backend:
+    name: Docker Backend (Build & GHCR Push)
     needs: [validate]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -86,29 +86,29 @@ jobs:
         id: meta
         run: |
           OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-api"
+          IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-backend"
           TAG="${{ github.sha }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build & Push API Docker image
+      - name: Build & Push Backend Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile.api
+          file: docker/Dockerfile.backend
           push: true
           tags: |
             ${{ steps.meta.outputs.ref }}
             ${{ steps.meta.outputs.image }}:latest
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
   # ==========================================
-  # STAGE 2B: Build & Push Web Image
+  # STAGE 2B: Build & Push Frontend Image
   # ==========================================
-  build-web:
-    name: 🌐 Docker Web (Build & GHCR Push)
+  build-frontend:
+    name: Docker Frontend (Build & GHCR Push)
     needs: [validate]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -135,117 +135,120 @@ jobs:
         id: meta
         run: |
           OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-web"
+          IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-frontend"
           TAG="${{ github.sha }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build & Push Web Docker image
+      - name: Build & Push Frontend Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile.web
+          file: docker/Dockerfile.frontend
           push: true
           tags: |
             ${{ steps.meta.outputs.ref }}
             ${{ steps.meta.outputs.image }}:latest
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
   # ==========================================
   # STAGE 3: Production Deployment to Server
   # ==========================================
   deploy:
-    name: 🚀 Deploy to Production VPS (5.159.49.36)
-    needs: [build-api, build-web]
+    name: Deploy to Production VPS
+    needs: [build-backend, build-frontend]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    environment: production
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure SSH Key
+      - name: Validate required secrets
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
-          test -n "$SSH_HOST" || { echo "ERROR: Missing secret SSH_HOST (should be 5.159.49.36)"; exit 1; }
-          test -n "$SSH_USER" || { echo "ERROR: Missing secret SSH_USER (should be root)"; exit 1; }
+          test -n "$SSH_HOST" || { echo "ERROR: Missing secret SSH_HOST"; exit 1; }
+          test -n "$SSH_USER" || { echo "ERROR: Missing secret SSH_USER"; exit 1; }
           test -n "$SSH_PRIVATE_KEY" || { echo "ERROR: Missing secret SSH_PRIVATE_KEY"; exit 1; }
+          test -n "$GHCR_PULL_TOKEN" || { echo "ERROR: Missing secret GHCR_PULL_TOKEN (PAT with read:packages)"; exit 1; }
 
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
-          echo "" >> ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H -T 20 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || {
+            echo "WARN: ssh-keyscan failed; allowing first connect with StrictHostKeyChecking=accept-new"
+            echo "StrictHostKeyChecking accept-new" >> ~/.ssh/config
+          }
+          chmod 600 ~/.ssh/known_hosts ~/.ssh/config 2>/dev/null || true
 
-          # Verify key format validity without exposing content
-          ssh-keygen -l -f ~/.ssh/id_deploy || { echo "ERROR: Invalid SSH private key format"; exit 1; }
-
-          # Configure SSH client defaults
-          cat <<EOF > ~/.ssh/config
-          Host *
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            ServerAliveInterval 30
-            ServerAliveCountMax 5
-            ConnectTimeout 20
-            LogLevel ERROR
-          EOF
-          chmod 600 ~/.ssh/config
-
-      - name: Synchronize compose configuration to server
+      - name: Sync compose + nginx config to server
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          echo "Connecting to $SSH_USER@$SSH_HOST to prepare ${{ env.REMOTE_DIR }}..."
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}"
-          echo "Uploading docker-compose.prod.yml..."
-          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
+          ssh -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}/docker"
+          scp docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
+          scp docker/nginx.conf "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker/nginx.conf"
+          # Ensure persistent config.json exists (do not overwrite if present)
+          ssh "$SSH_USER@$SSH_HOST" "test -f ${{ env.REMOTE_DIR }}/config.json || echo '{}' > ${{ env.REMOTE_DIR }}/config.json"
 
       - name: Pull images & rolling restart on server
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
-          API_IMAGE: ${{ needs.build-api.outputs.image_ref }}
-          WEB_IMAGE: ${{ needs.build-web.outputs.image_ref }}
+          BACKEND_IMAGE: ${{ needs.build-backend.outputs.image_ref }}
+          FRONTEND_IMAGE: ${{ needs.build-frontend.outputs.image_ref }}
           GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
-            API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
+          ssh "$SSH_USER@$SSH_HOST" \
+            BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
+            GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
             bash -s <<'EOF'
           set -euo pipefail
           cd "$REMOTE_DIR"
 
-          # Login to GHCR if token provided
-          if [ -n "${GHCR_TOKEN:-}" ]; then
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || true
-          fi
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-          # Update image references in .env
           touch .env
-          if grep -q '^API_IMAGE=' .env; then
-            sed -i "s|^API_IMAGE=.*|API_IMAGE=${API_IMAGE}|" .env
+          if grep -q '^BACKEND_IMAGE=' .env; then
+            sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=${BACKEND_IMAGE}|" .env
           else
-            echo "API_IMAGE=${API_IMAGE}" >> .env
+            echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> .env
           fi
 
-          if grep -q '^WEB_IMAGE=' .env; then
-            sed -i "s|^WEB_IMAGE=.*|WEB_IMAGE=${WEB_IMAGE}|" .env
+          if grep -q '^FRONTEND_IMAGE=' .env; then
+            sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${FRONTEND_IMAGE}|" .env
           else
-            echo "WEB_IMAGE=${WEB_IMAGE}" >> .env
+            echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> .env
           fi
+
+          # Remove legacy env keys if present
+          sed -i '/^API_IMAGE=/d;/^WEB_IMAGE=/d' .env || true
+
+          # Stop legacy published ports if still running (api:3880 / old frontend:3000)
+          docker rm -f saf-shekan-api saf-shekan-web 2>/dev/null || true
 
           echo "--> Pulling latest container images..."
           docker compose pull
 
-          echo "--> Applying zero-downtime rolling update..."
+          echo "--> Applying rolling update (nginx + backend + frontend)..."
           docker compose up -d --remove-orphans
 
           echo "--> Cleaning up unused dangling images..."
@@ -256,55 +259,45 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
-          echo "🔍 Verifying API Health at http://${SSH_HOST}:3880/api/health..."
-          API_UP=false
-          for i in $(seq 1 30); do
-            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3880/api/health" >/dev/null; then
-              API_UP=true
-              echo "✓ API is UP & Healthy on attempt $i"
-              curl -s "http://${SSH_HOST}:3880/api/health"
+          echo "Verifying stack at http://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
+          STACK_UP=false
+          for i in $(seq 1 40); do
+            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3000/api/health" >/dev/null \
+              && curl -sf --connect-timeout 5 "http://${SSH_HOST}:3000" >/dev/null; then
+              STACK_UP=true
+              echo "Frontend + Backend (via nginx) healthy on attempt $i"
+              curl -s "http://${SSH_HOST}:3000/api/health"
               echo ""
               break
             fi
-            echo "Waiting for API... ($i/30)"
+            echo "Waiting for :3000... ($i/40)"
             sleep 3
           done
 
-          echo "🔍 Verifying Web Dashboard at http://${SSH_HOST}:3000..."
-          WEB_UP=false
-          for i in $(seq 1 30); do
-            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3000" >/dev/null; then
-              WEB_UP=true
-              echo "✓ Web Dashboard is UP & Healthy on attempt $i"
-              break
-            fi
-            echo "Waiting for Web Dashboard... ($i/30)"
-            sleep 3
-          done
-
-          if [ "$API_UP" = false ] || [ "$WEB_UP" = false ]; then
-            echo "❌ Deployment Health Check Failed!"
+          if [ "$STACK_UP" = false ]; then
+            echo "Deployment Health Check Failed!"
             exit 1
           fi
 
-          echo "🎉 All services deployed and verified successfully!"
+          echo "All services deployed and verified successfully!"
 
       - name: Publish Deployment Summary
         if: always()
         run: |
           cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ⚡ SafShekan Production Deployment Report
+          ## SafShekan Production Deployment Report
 
           | Component | Status | URL |
           |---|---|---|
-          | **Web Dashboard** | 🟢 Live | [http://${{ secrets.SSH_HOST }}:3000](http://${{ secrets.SSH_HOST }}:3000) |
-          | **API Engine** | 🟢 Live | [http://${{ secrets.SSH_HOST }}:3880/api/status](http://${{ secrets.SSH_HOST }}:3880/api/status) |
-          | **Swagger Docs** | 📖 Ready | [http://${{ secrets.SSH_HOST }}:3880/api/docs](http://${{ secrets.SSH_HOST }}:3880/api/docs) |
-          | **Health Check** | 🩺 Healthy | [http://${{ secrets.SSH_HOST }}:3880/api/health](http://${{ secrets.SSH_HOST }}:3880/api/health) |
+          | **Frontend Dashboard** | Live | [http://${{ secrets.SSH_HOST }}:3000](http://${{ secrets.SSH_HOST }}:3000) |
+          | **Backend Engine** | Live | [http://${{ secrets.SSH_HOST }}:3000/api/status](http://${{ secrets.SSH_HOST }}:3000/api/status) |
+          | **Swagger Docs** | Ready | [http://${{ secrets.SSH_HOST }}:3000/api/docs](http://${{ secrets.SSH_HOST }}:3000/api/docs) |
+          | **Health Check** | Healthy | [http://${{ secrets.SSH_HOST }}:3000/api/health](http://${{ secrets.SSH_HOST }}:3000/api/health) |
 
           - **Git SHA**: \`${{ github.sha }}\`
           - **Triggered By**: @${{ github.actor }}
           - **Target VPS**: \`${{ secrets.SSH_HOST }}\` (\`/opt/saf-shekan\`)
-          - **API Image**: \`${{ needs.build-api.outputs.image_ref }}\`
-          - **Web Image**: \`${{ needs.build-web.outputs.image_ref }}\`
+          - **Gateway**: nginx on \`:3000\` → backend \`/api\`+\`/ws\`, frontend \`/\`
+          - **Backend Image**: \`${{ needs.build-backend.outputs.image_ref }}\`
+          - **Frontend Image**: \`${{ needs.build-frontend.outputs.image_ref }}\`
           EOF

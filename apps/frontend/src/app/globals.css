@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-vazirmatn), "Vazirmatn", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
+  --color-background: #070b14;
+  --color-foreground: #f8fafc;
+  --color-card: #0f131c;
+  --color-primary: #10b981;
+  --color-primary-foreground: #020617;
+  --color-muted: rgba(255, 255, 255, 0.04);
+  --color-muted-foreground: #94a3b8;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-ring: #06b6d4;
+  --color-destructive: #ef4444;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: #070b14;
+  color: #f8fafc;
+  font-family: var(--font-sans);
+}
+
+.num-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}

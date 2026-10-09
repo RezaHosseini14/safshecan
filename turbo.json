@@ -12,7 +12,8 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["PORT", "SAF_SHEKAN_WEB_DEV", "API_URL", "SAF_SHEKAN_SKIP_BROWSER"]
     },
     "test": {
       "dependsOn": ["^build"],

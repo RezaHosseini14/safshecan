@@ -28,7 +28,7 @@ program
 program
   .command('status')
   .description('Check backend server and trading engine status')
-  .option('-p, --port <port>', 'API Server port', '3880')
+  .option('-p, --port <port>', 'API Server port', '3000')
   .action(async (options) => {
     console.log(BANNER);
     console.log(chalk.cyan(`📡 Connecting to SafShekan API on http://127.0.0.1:${options.port}...`));
@@ -45,7 +45,7 @@ program
       console.log(`  Time Sync:      ${data.timeSync?.synchronized ? chalk.green('SYNCED') : chalk.red('DRIFTING')} (Offset: ${data.timeSync?.offsetMs ?? 0}ms, RTT: ${data.timeSync?.rttMs ?? 0}ms)`);
     } catch (err: any) {
       console.log(chalk.red(`✕ Could not reach SafShekan backend: ${err.message}`));
-      console.log(chalk.gray(`Tip: Start the backend using: pnpm --filter @saf-shekan/api start`));
+      console.log(chalk.gray(`Tip: Start the backend using: pnpm --filter @saf-shekan/backend start`));
     }
   });
 

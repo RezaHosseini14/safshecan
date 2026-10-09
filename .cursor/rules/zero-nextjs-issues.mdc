@@ -1,0 +1,17 @@
+---
+description: After frontend changes, leave lint and build clean.
+alwaysApply: true
+---
+
+# Zero Next.js issues
+
+After changes under `apps/frontend`, do not finish while lint or a required build is broken.
+
+From the repo root:
+
+1. `pnpm --filter @saf-shekan/frontend lint` — zero ESLint errors
+2. If routes, layouts, or shared UI used by routes changed: `pnpm --filter @saf-shekan/frontend build`
+
+Backend changes: `pnpm --filter @saf-shekan/backend build` and the package test script. Do not leave a broken frontend import.
+
+Prefer a root-cause fix over `eslint-disable` or `@ts-ignore`.

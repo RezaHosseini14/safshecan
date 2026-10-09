@@ -1,0 +1,15 @@
+---
+description: NestJS rules for the SafShekan backend. Generic Nest skills do not override this file.
+globs: apps/backend/**/*.ts
+alwaysApply: false
+---
+
+# NestJS — صف‌شکن
+
+- NestJS 12. Controller to service. One feature module per capability under `apps/backend/src`.
+- Domain types come from `@saf-shekan/core`. DTOs mirror those shapes with `class-validator`.
+- Broker config is a JSON file on disk. There is no database, Prisma, TypeORM, Passport, JWT auth, multi-tenant filter, BullMQ, or microservice split in this app.
+- If a vendored Nest skill recommends those, ignore it here.
+- Only `EnvModule` is `@Global()`. Other modules export what they own and are imported explicitly.
+- `engine/domain` does not import `@nestjs/*` or `undici`.
+- Vitest. Do not hit a live broker or TSETMC host from tests.

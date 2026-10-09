@@ -1,0 +1,12 @@
+---
+description: SafShekan agent core — always on.
+alwaysApply: true
+---
+
+# SafShekan
+
+صف‌شکن: موتور سرخطی بورس تهران. Next.js 16 + NestJS 12 + `@saf-shekan/core`.
+
+- Smallest diff. Feature-first. Named exports.
+- Layering: `architecture.mdc`. Types: `typescript.mdc`. Domain: `market-domain.mdc`.
+- Frontend visual source is the Stitch terminal. Do not port ZARVA layouts, icons, or page anatomy.

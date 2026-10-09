@@ -1,166 +1,225 @@
 #!/usr/bin/env node
 
 /**
- * SafShekan Remote Server Deployment Tool
- * 
- * Automates direct deployment to the production VPS (5.159.49.36).
+ * SafShekan Remote Server Deployment Tool (OpenSSH-based)
+ *
  * Usage:
  *   node scripts/deploy-remote.mjs
  *   pnpm run deploy:remote
+ *
+ * Auth (required — one of):
+ *   SSH_PRIVATE_KEY env (written to a temp key file), or
+ *   ~/.ssh/id_ed25519_safshekan, or
+ *   default ssh-agent / default identity
+ *
+ * Optional: SSH_PASSWORD is NOT used (use key auth only).
  */
 
-import { Client } from 'ssh2';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
 const SERVER_HOST = process.env.SSH_HOST || '5.159.49.36';
-const SERVER_PORT = Number(process.env.SSH_PORT) || 22;
+const SERVER_PORT = String(process.env.SSH_PORT || 22);
 const SERVER_USER = process.env.SSH_USER || 'root';
-const SERVER_PASS = process.env.SSH_PASSWORD || 'SShkdl5yuzCma75a';
 const REMOTE_PATH = '/opt/saf-shekan';
+const TARGET = `${SERVER_USER}@${SERVER_HOST}`;
 
-// Read private key dynamically from ~/.ssh or environment
-function getPrivateKey() {
-  if (process.env.SSH_PRIVATE_KEY) return process.env.SSH_PRIVATE_KEY;
+function resolveIdentityFile() {
+  if (process.env.SSH_PRIVATE_KEY) {
+    const tmpKey = path.join(os.tmpdir(), `safshekan-deploy-${process.pid}.key`);
+    fs.writeFileSync(tmpKey, process.env.SSH_PRIVATE_KEY.replace(/\r\n/g, '\n'), {
+      mode: 0o600,
+    });
+    return { path: tmpKey, cleanup: true };
+  }
   const defaultKeyPath = path.join(os.homedir(), '.ssh', 'id_ed25519_safshekan');
   if (fs.existsSync(defaultKeyPath)) {
-    return fs.readFileSync(defaultKeyPath, 'utf8');
+    return { path: defaultKeyPath, cleanup: false };
   }
-  return null;
+  return { path: null, cleanup: false };
+}
+
+function sshArgs(identityPath, extra = []) {
+  const args = [
+    '-p',
+    SERVER_PORT,
+    '-o',
+    'StrictHostKeyChecking=accept-new',
+    '-o',
+    'ConnectTimeout=30',
+    '-o',
+    'ServerAliveInterval=30',
+  ];
+  if (identityPath) {
+    args.push('-i', identityPath);
+  }
+  args.push(...extra);
+  return args;
+}
+
+function runSsh(identityPath, remoteCommand) {
+  execFileSync(
+    'ssh',
+    [...sshArgs(identityPath), TARGET, remoteCommand],
+    { stdio: 'inherit' }
+  );
+}
+
+function runScp(identityPath, localPath, remotePath) {
+  const args = [
+    '-P',
+    SERVER_PORT,
+    '-o',
+    'StrictHostKeyChecking=accept-new',
+    '-o',
+    'ConnectTimeout=30',
+  ];
+  if (identityPath) {
+    args.push('-i', identityPath);
+  }
+  args.push(localPath, `${TARGET}:${remotePath}`);
+  execFileSync('scp', args, { stdio: 'inherit' });
 }
 
 async function main() {
   console.log('\n=============================================================');
-  console.log('⚡ SafShekan Direct Remote VPS Deployment');
-  console.log(`🌐 Target: ${SERVER_USER}@${SERVER_HOST}:${SERVER_PORT}`);
+  console.log('SafShekan Direct Remote VPS Deployment');
+  console.log(`Target: ${TARGET}:${SERVER_PORT}`);
   console.log('=============================================================\n');
+
+  const identity = resolveIdentityFile();
+  if (!identity.path) {
+    console.log('No dedicated key found; using default ssh identity / agent.');
+  } else {
+    console.log(`Using identity: ${identity.path}`);
+  }
 
   const rootDir = process.cwd();
   const tmpArchive = path.join(os.tmpdir(), `saf-shekan-${Date.now()}.tar.gz`);
 
-  console.log('📦 1/5 Compressing codebase for upload...');
-  execSync(
-    `tar --exclude=node_modules --exclude=.next --exclude=.git --exclude=dist --exclude=.turbo --exclude=test-prune-* -czf "${tmpArchive}" .`,
-    { cwd: rootDir, stdio: 'inherit' }
-  );
+  console.log('1/5 Compressing codebase for upload...');
+  const tarExcludes = [
+    '--exclude=node_modules',
+    '--exclude=.next',
+    '--exclude=.git',
+    '--exclude=dist',
+    '--exclude=.turbo',
+    '--exclude=test-prune-*',
+    '--exclude=.tmp-stitch',
+    '--exclude=*.log',
+    '--exclude=.saf-shekan-dev.err.log',
+    '--exclude=.saf-shekan-dev.out.log',
+  ].join(' ');
+  execSync(`tar ${tarExcludes} -czf "${tmpArchive}" .`, {
+    cwd: rootDir,
+    stdio: 'inherit',
+    shell: true,
+  });
 
   const archiveSizeMb = (fs.statSync(tmpArchive).size / (1024 * 1024)).toFixed(2);
   console.log(`   Archive created: ${archiveSizeMb} MB`);
 
-  console.log('\n🔌 2/5 Connecting to VPS via SSH...');
-  const conn = new Client();
+  console.log('\n2/5 Preparing remote directory...');
+  runSsh(identity.path, `mkdir -p ${REMOTE_PATH}/app ${REMOTE_PATH}/docker`);
 
-  const connectOptions = {
-    host: SERVER_HOST,
-    port: SERVER_PORT,
-    username: SERVER_USER,
-    readyTimeout: 30000,
-  };
-
-  const privKey = getPrivateKey();
-  if (privKey) {
-    connectOptions.privateKey = privKey;
-  }
-
-  await new Promise((resolve, reject) => {
-    conn.on('ready', resolve);
-    conn.on('error', (err) => {
-      // Fallback to password authentication
-      console.log('   SSH Key authentication skipped, falling back to password...');
-      delete connectOptions.privateKey;
-      connectOptions.password = SERVER_PASS;
-      const passConn = new Client();
-      passConn.on('ready', () => {
-        Object.assign(conn, passConn);
-        resolve();
-      });
-      passConn.on('error', reject);
-      passConn.connect(connectOptions);
-    });
-    conn.connect(connectOptions);
-  });
-
-  console.log('   ✓ Connected to server successfully!');
-
-  const runRemote = (cmd) =>
-    new Promise((resolve, reject) => {
-      conn.exec(cmd, (err, stream) => {
-        if (err) return reject(err);
-        let stdout = '';
-        let stderr = '';
-        stream
-          .on('close', (code) => resolve({ code, stdout, stderr }))
-          .on('data', (d) => {
-            process.stdout.write(d.toString());
-            stdout += d;
-          })
-          .stderr.on('data', (d) => {
-            process.stderr.write(d.toString());
-            stderr += d;
-          });
-      });
-    });
-
-  console.log('\n📤 3/5 Uploading source code to VPS...');
-  await new Promise((resolve, reject) => {
-    conn.sftp((err, sftp) => {
-      if (err) return reject(err);
-      sftp.fastPut(tmpArchive, `${REMOTE_PATH}/upload.tar.gz`, (uploadErr) => {
-        if (uploadErr) reject(uploadErr);
-        else resolve();
-      });
-    });
-  });
-  console.log('   ✓ Upload complete!');
-
+  console.log('\n3/5 Uploading source archive...');
+  runScp(identity.path, tmpArchive, `${REMOTE_PATH}/upload.tar.gz`);
   try {
     fs.unlinkSync(tmpArchive);
-  } catch {}
+  } catch {
+    // ignore
+  }
+  console.log('   Upload complete!');
 
-  console.log('\n🔨 4/5 Extracting code and executing Docker build on VPS...');
-  await runRemote(`
+  console.log('\n4/5 Extracting, building images, starting nginx gateway...');
+  runSsh(
+    identity.path,
+    `
     set -euo pipefail
-    mkdir -p ${REMOTE_PATH}/app
+    mkdir -p ${REMOTE_PATH}/app ${REMOTE_PATH}/docker
     tar -xzf ${REMOTE_PATH}/upload.tar.gz -C ${REMOTE_PATH}/app
     rm -f ${REMOTE_PATH}/upload.tar.gz
-    cp -n ${REMOTE_PATH}/app/config.json ${REMOTE_PATH}/config.json 2>/dev/null || true
+
+    if [ ! -f ${REMOTE_PATH}/config.json ]; then
+      cp ${REMOTE_PATH}/app/apps/backend/config.json ${REMOTE_PATH}/config.json 2>/dev/null \
+        || cp ${REMOTE_PATH}/app/config.json ${REMOTE_PATH}/config.json 2>/dev/null \
+        || echo '{}' > ${REMOTE_PATH}/config.json
+    fi
+
+    cp ${REMOTE_PATH}/app/docker-compose.yml ${REMOTE_PATH}/docker-compose.yml
+    cp ${REMOTE_PATH}/app/docker/nginx.conf ${REMOTE_PATH}/docker/nginx.conf
+
     cd ${REMOTE_PATH}/app
     docker compose -f docker-compose.yml build
-    docker tag saf-shekan-api:latest ghcr.io/rezahosseini14/saf-shekan-api:latest 2>/dev/null || true
-    docker tag saf-shekan-web:latest ghcr.io/rezahosseini14/saf-shekan-web:latest 2>/dev/null || true
+
+    docker rm -f saf-shekan-api saf-shekan-web 2>/dev/null || true
+
     cd ${REMOTE_PATH}
+    touch .env
+    if grep -q '^BACKEND_IMAGE=' .env; then
+      sed -i 's|^BACKEND_IMAGE=.*|BACKEND_IMAGE=saf-shekan-backend:latest|' .env
+    else
+      echo 'BACKEND_IMAGE=saf-shekan-backend:latest' >> .env
+    fi
+    if grep -q '^FRONTEND_IMAGE=' .env; then
+      sed -i 's|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=saf-shekan-frontend:latest|' .env
+    else
+      echo 'FRONTEND_IMAGE=saf-shekan-frontend:latest' >> .env
+    fi
+    sed -i '/^API_IMAGE=/d;/^WEB_IMAGE=/d' .env || true
+
     docker compose up -d --remove-orphans
-  `);
+    docker image prune -f || true
+    `
+  );
 
-  console.log('\n🩺 5/5 Performing health check verification...');
-  await runRemote(`
-    sleep 5
-    if curl -sf http://127.0.0.1:3880/api/health >/dev/null; then
-      echo "✓ Backend API is healthy!"
-    else
-      echo "⚠ Warning: API health check timed out"
+  console.log('\n5/5 Health check verification...');
+  runSsh(
+    identity.path,
+    `
+    set -euo pipefail
+    STACK_UP=false
+    for i in $(seq 1 40); do
+      if curl -sf http://127.0.0.1:3000/api/health >/dev/null \
+        && curl -sf http://127.0.0.1:3000 >/dev/null; then
+        STACK_UP=true
+        echo "Stack healthy on attempt $i"
+        curl -s http://127.0.0.1:3000/api/health
+        echo ""
+        break
+      fi
+      echo "Waiting for nginx :3000... ($i/40)"
+      sleep 3
+    done
+    if [ "$STACK_UP" = false ]; then
+      echo "Health check failed"
+      docker compose -f ${REMOTE_PATH}/docker-compose.yml ps || true
+      docker compose -f ${REMOTE_PATH}/docker-compose.yml logs --tail=80 || true
+      exit 1
     fi
+    `
+  );
 
-    if curl -sf http://127.0.0.1:3000 >/dev/null; then
-      echo "✓ Web Dashboard is healthy!"
-    else
-      echo "⚠ Warning: Web Dashboard health check timed out"
-    fi
-  `);
+  if (identity.cleanup && identity.path) {
+    try {
+      fs.unlinkSync(identity.path);
+    } catch {
+      // ignore
+    }
+  }
 
-  conn.end();
-
-  console.log('\n🎉 =============================================================');
-  console.log('✅ SafShekan Successfully Deployed to Production!');
-  console.log(`🌐 Web Dashboard: http://${SERVER_HOST}:3000`);
-  console.log(`⚡ API Engine:    http://${SERVER_HOST}:3880/api/status`);
-  console.log(`📖 API Swagger:   http://${SERVER_HOST}:3880/api/docs`);
+  console.log('\n=============================================================');
+  console.log('SafShekan Successfully Deployed to Production!');
+  console.log(`Frontend:       http://${SERVER_HOST}:3000`);
+  console.log(`Backend Engine: http://${SERVER_HOST}:3000/api/status`);
+  console.log(`API Swagger:    http://${SERVER_HOST}:3000/api/docs`);
+  console.log(`Health:         http://${SERVER_HOST}:3000/api/health`);
   console.log('=============================================================\n');
 }
 
 main().catch((err) => {
-  console.error('\n❌ Deployment failed:', err);
+  console.error('\nDeployment failed:', err);
   process.exit(1);
 });

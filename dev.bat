@@ -5,9 +5,8 @@ echo =====================================================================
 echo   ⚡ صف‌شکن (SafShekan) - اجرای یکپارچه در خط فرمان (CMD)
 echo =====================================================================
 echo.
-echo 🌐 داشبورد وب:       http://localhost:3000
-echo 🔌 بک‌اند NestJS:    http://localhost:3880
-echo 📖 مستندات Swagger:  http://localhost:3880/api/docs
+echo 🌐 همه چیز (وب + API):  http://localhost:3000
+echo 📖 مستندات Swagger:     http://localhost:3000/api/docs
 echo.
 echo در حال اجرای Turbo Dev...
 pnpm dev

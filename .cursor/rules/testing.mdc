@@ -1,0 +1,13 @@
+---
+description: Vitest for engine, fees, and API.
+alwaysApply: false
+---
+
+# Testing
+
+Vitest. Critical paths: fee calculator, queue estimator, sniper timing, broker DTO validation, time-sync offset.
+
+- Pure math tests live next to `packages/core`
+- Backend e2e covers config, brokers, sniper start/stop, and throttling
+- Frontend Vitest lives in `apps/frontend/test`: secret masking, Zod rejection, `/api`-only client, and the armed disarm control
+- Do not hit live broker or TSE hosts in tests. Use fixtures. No Playwright or Cypress

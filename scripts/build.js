@@ -7,57 +7,30 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const coreDir = path.join(rootDir, 'packages', 'core');
-const webDir = path.join(rootDir, 'apps', 'web');
-const apiDir = path.join(rootDir, 'apps', 'api');
+const backendDir = path.join(rootDir, 'apps', 'backend');
+const backendDistDir = path.join(backendDir, 'dist');
+const backendDataDistDir = path.join(backendDistDir, 'data');
+const backendDataSrcDir = path.join(backendDir, 'src', 'data');
 
-const webOutDir = path.join(webDir, 'out');
-const apiDistDir = path.join(apiDir, 'dist');
-const apiPublicDistDir = path.join(apiDistDir, 'public');
-const apiPublicSrcDir = path.join(apiDir, 'src', 'public');
-const apiDataDistDir = path.join(apiDistDir, 'data');
-const apiDataSrcDir = path.join(apiDir, 'src', 'data');
-
-console.log('⚡ [1/5] Building @saf-shekan/core shared package...');
+console.log('⚡ [1/3] Building @saf-shekan/core shared package...');
 execSync('pnpm --filter @saf-shekan/core build', {
   cwd: rootDir,
   stdio: 'inherit',
 });
 
-console.log('\n⚡ [2/5] Building @saf-shekan/web Next.js frontend with static export...');
-execSync('pnpm --filter @saf-shekan/web build', {
-  cwd: rootDir,
-  stdio: 'inherit',
-  env: { ...process.env, NEXT_EXPORT: 'true' },
-});
-
-console.log('\n⚙️ [3/5] Compiling @saf-shekan/api TypeScript Backend with tsc...');
-execSync('pnpm --filter @saf-shekan/api build', {
+console.log('\n⚙️ [2/3] Compiling @saf-shekan/backend TypeScript with tsc...');
+execSync('pnpm --filter @saf-shekan/backend build', {
   cwd: rootDir,
   stdio: 'inherit',
 });
 
-console.log('\n📦 [4/5] Packaging static web assets to api/dist/public and api/src/public...');
-if (!fs.existsSync(apiPublicDistDir)) {
-  fs.mkdirSync(apiPublicDistDir, { recursive: true });
-}
-if (!fs.existsSync(apiPublicSrcDir)) {
-  fs.mkdirSync(apiPublicSrcDir, { recursive: true });
-}
-
-if (fs.existsSync(webOutDir)) {
-  fs.cpSync(webOutDir, apiPublicDistDir, { recursive: true });
-  fs.cpSync(webOutDir, apiPublicSrcDir, { recursive: true });
-  console.log('✓ Next.js build synced to API public distribution.');
-}
-
-console.log('\n📊 [5/5] Copying TSE data assets (symbols and historical IPOs)...');
-if (fs.existsSync(apiDataSrcDir)) {
-  if (!fs.existsSync(apiDataDistDir)) {
-    fs.mkdirSync(apiDataDistDir, { recursive: true });
+console.log('\n📊 [3/3] Copying TSE data assets (symbols and historical IPOs)...');
+if (fs.existsSync(backendDataSrcDir)) {
+  if (!fs.existsSync(backendDataDistDir)) {
+    fs.mkdirSync(backendDataDistDir, { recursive: true });
   }
-  fs.cpSync(apiDataSrcDir, apiDataDistDir, { recursive: true });
-  console.log('✓ TSE Data assets copied to API dist/data.');
+  fs.cpSync(backendDataSrcDir, backendDataDistDir, { recursive: true });
+  console.log('✓ TSE Data assets copied to backend dist/data.');
 }
 
-console.log('\n🎉 Monorepo build successfully completed! Ready for production.');
+console.log('\n🎉 Backend monorepo build completed (API-only; UI lives in apps/frontend).');

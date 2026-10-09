@@ -82,8 +82,10 @@ export interface OrderShotResult {
   httpStatus: number;
   success: boolean;
   trackingCode?: string;
-  rawResponse?: any;
+  rawResponse?: unknown;
   errorMessage?: string;
+  queueRank?: number;
+  orderValueRials?: number;
   headers?: Record<string, string>;
   symbol?: string;
   broker?: string;
@@ -94,7 +96,14 @@ export interface OrderShotResult {
 export type ShotResult = OrderShotResult;
 
 export interface ServerBroadcastMessage {
-  type: 'CLOCK_TICK' | 'STATE_CHANGE' | 'TIME_SYNC' | 'SHOT_LOG' | 'ORDER_SHOT' | 'SNIPER_SUMMARY';
+  type:
+    | 'CLOCK_TICK'
+    | 'STATE_CHANGE'
+    | 'TIME_SYNC'
+    | 'SHOT_LOG'
+    | 'ORDER_SHOT'
+    | 'SNIPER_SUMMARY'
+    | 'QUOTE_UPDATE';
   data: any;
 }
 
@@ -113,6 +122,7 @@ export interface SymbolItem {
   name: string;
   group?: string;
   isin: string;
+  insCode?: string;
   market?: string;
   price?: number;
   yesterdayPrice?: number;
