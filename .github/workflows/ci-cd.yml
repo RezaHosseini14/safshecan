@@ -211,6 +211,7 @@ jobs:
           ssh -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}/docker"
           scp docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
           scp docker/nginx.conf "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker/nginx.conf"
+          scp docker/nginx-entrypoint.sh "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker/nginx-entrypoint.sh"
           # Ensure persistent config.json exists (do not overwrite if present)
           ssh "$SSH_USER@$SSH_HOST" "test -f ${{ env.REMOTE_DIR }}/config.json || echo '{}' > ${{ env.REMOTE_DIR }}/config.json"
 
@@ -266,14 +267,14 @@ jobs:
 
       - name: Production Health Check Verification
         run: |
-          echo "Verifying stack at http://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
+          echo "Verifying stack at https://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
           STACK_UP=false
           for i in $(seq 1 40); do
-            if curl -sf --connect-timeout 5 "http://${SSH_HOST}:3000/api/health" >/dev/null \
-              && curl -sf --connect-timeout 5 "http://${SSH_HOST}:3000" >/dev/null; then
+            if curl -kfsS --connect-timeout 5 "https://${SSH_HOST}:3000/api/health" >/dev/null \
+              && curl -kfsS --connect-timeout 5 "https://${SSH_HOST}:3000" >/dev/null; then
               STACK_UP=true
               echo "Frontend + Backend (via nginx) healthy on attempt $i"
-              curl -s "http://${SSH_HOST}:3000/api/health"
+              curl -kfsS "https://${SSH_HOST}:3000/api/health"
               echo ""
               break
             fi
@@ -296,10 +297,10 @@ jobs:
 
           | Component | Status | URL |
           |---|---|---|
-          | **Frontend Dashboard** | Live | [http://${{ env.SSH_HOST }}:3000](http://${{ env.SSH_HOST }}:3000) |
-          | **Backend Engine** | Live | [http://${{ env.SSH_HOST }}:3000/api/status](http://${{ env.SSH_HOST }}:3000/api/status) |
-          | **Swagger Docs** | Ready | [http://${{ env.SSH_HOST }}:3000/api/docs](http://${{ env.SSH_HOST }}:3000/api/docs) |
-          | **Health Check** | Healthy | [http://${{ env.SSH_HOST }}:3000/api/health](http://${{ env.SSH_HOST }}:3000/api/health) |
+          | **Frontend Dashboard** | Live | [https://${{ env.SSH_HOST }}:3000](https://${{ env.SSH_HOST }}:3000) |
+          | **Backend Engine** | Live | [https://${{ env.SSH_HOST }}:3000/api/status](https://${{ env.SSH_HOST }}:3000/api/status) |
+          | **Swagger Docs** | Ready | [https://${{ env.SSH_HOST }}:3000/api/docs](https://${{ env.SSH_HOST }}:3000/api/docs) |
+          | **Health Check** | Healthy | [https://${{ env.SSH_HOST }}:3000/api/health](https://${{ env.SSH_HOST }}:3000/api/health) |
 
           - **Git SHA**: \`${{ github.sha }}\`
           - **Triggered By**: @${{ github.actor }}

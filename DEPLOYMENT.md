@@ -28,9 +28,10 @@ flowchart LR
 ## مشخصات سرور و پورت‌ها
 
 - **آدرس سرور:** `5.159.49.36`
-- **پورت عمومی (nginx → frontend + پروکسی API/WS):** `http://5.159.49.36:3000`
-- **مستندات Swagger:** `http://5.159.49.36:3000/api/docs`
-- **Health Check:** `http://5.159.49.36:3000/api/health`
+- **پورت عمومی (nginx → frontend + پروکسی API/WS):** `https://5.159.49.36:3000`
+- **مستندات Swagger:** `https://5.159.49.36:3000/api/docs`
+- **Health Check:** `https://5.159.49.36:3000/api/health`
+- گواهی روی پورت عمومی خودامضا است (هشدار مرورگر یک‌بار). HTTP روی این پورت CSS و JS را در مسیر با صفحهٔ فیلتر عوض می‌کند؛ TLS جلوی آن را می‌گیرد.
 - **مسیر پروژه در سرور:** `/opt/saf-shekan`
 - پورت قدیمی `3880` دیگر استفاده نمی‌شود (همه از پشت nginx روی `:3000`).
 
@@ -93,7 +94,7 @@ ssh root@5.159.49.36
 cd /opt/saf-shekan
 docker compose ps
 docker compose logs -f
-curl -sf http://127.0.0.1:3000/api/health
+curl -kf https://127.0.0.1:3000/api/health
 ```
 
 ---
@@ -111,7 +112,7 @@ curl -sf http://127.0.0.1:3000/api/health
 ## Smoke test بعد از دیپلوی
 
 ```bash
-curl -sf http://5.159.49.36:3000/api/health   # باید JSON status=ok برگرداند
-curl -sf http://5.159.49.36:3000/              # داشبورد
+curl -kf https://5.159.49.36:3000/api/health   # باید JSON status=ok برگرداند
+curl -kf https://5.159.49.36:3000/              # داشبورد
 # در مرورگر: ساعت اتمی باید از 00:00:00 خارج شود و WS وصل باشد
 ```
