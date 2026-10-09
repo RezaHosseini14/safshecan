@@ -257,6 +257,9 @@ jobs:
           echo "--> Applying rolling update (nginx + backend + frontend)..."
           docker compose up -d --remove-orphans
 
+          echo "--> Reloading nginx so the mounted config is applied..."
+          docker exec saf-shekan-nginx nginx -s reload
+
           echo "--> Cleaning up unused dangling images..."
           docker image prune -f || true
           EOF
