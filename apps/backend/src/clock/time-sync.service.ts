@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import dgram from 'node:dgram';
 import { request } from 'undici';
+import { t } from '@saf-shekan/i18n';
 import { DEFAULT_NTP_SERVERS, type TimeSyncStatus } from '@saf-shekan/core';
 import { BotConfigService } from '../bot-config/bot-config.service.js';
 import { formatExactTime } from '../shared/time/format-time.js';
-import { applySyncFailure, isManualTimeSource } from './time-sync-policy.js';
+import { MANUAL_TIME_SOURCE, applySyncFailure, isManualTimeSource } from './time-sync-policy.js';
 
 @Injectable()
 export class NestTimeSyncService {
@@ -68,7 +69,7 @@ export class NestTimeSyncService {
       const failed = applySyncFailure(this.getStatus());
       this.synchronized = failed.synchronized;
     }
-    this.logger.warn('⚠ همگام‌سازی زمان ناموفق بود؛ از ساعت محلی سیستم استفاده می‌شود.');
+    this.logger.warn(t('logs', 'timeSyncFail'));
     return this.getStatus();
   }
 
@@ -102,9 +103,9 @@ export class NestTimeSyncService {
     this.revision += 1;
     this.offsetMs = offsetMs;
     this.synchronized = true;
-    this.lastSyncSource = 'تنظیم دستی کاربر';
+    this.lastSyncSource = MANUAL_TIME_SOURCE;
     this.lastSyncTime = new Date();
-    this.logger.log(`انحراف دستی زمان تنظیم شد: ${offsetMs}ms`);
+    this.logger.log(t('logs', 'manualOffset', { offset: offsetMs }));
     return this.getStatus();
   }
 
@@ -115,7 +116,13 @@ export class NestTimeSyncService {
     this.lastSyncSource = source;
     this.synchronized = true;
     this.lastSyncTime = new Date();
-    this.logger.log(`✓ زمان با ${this.lastSyncSource} کالیبره شد (انحراف: ${this.offsetMs}ms, پینگ: ${this.rttMs}ms)`);
+    this.logger.log(
+      t('logs', 'timeCalibrated', {
+        source: this.lastSyncSource,
+        offset: this.offsetMs,
+        rtt: this.rttMs,
+      })
+    );
     return true;
   }
 

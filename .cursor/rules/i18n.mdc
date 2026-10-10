@@ -1,0 +1,43 @@
+---
+description: All user-visible copy goes through the Persian i18n catalog. No hardcoded Persian in source.
+alwaysApply: true
+---
+
+# i18n
+
+SafShekan shows Persian. The only place a Persian sentence may be written is `packages/i18n/messages/fa/*.json`.
+
+Locale is fixed: `fa`, `lang="fa"`, `dir="rtl"`. Do not add a `[locale]` segment, middleware, or a language switcher unless the task explicitly asks for a second locale. A new locale is a new JSON tree, not a rewrite of call sites.
+
+## How to read copy
+
+- React client components: `useTranslations('namespace')` from `next-intl`. `apps/frontend/src/i18n/request.ts` plus `createNextIntlPlugin()` in `next.config.ts` load the `fa` catalog. The root layout mounts `NextIntlClientProvider` with `locale` and `messages` from `@saf-shekan/i18n`. Do not remove that request file; without it Next throws "Couldn't find next-intl config file".
+- Everywhere else (Nest, CLI, domain helpers, metadata, tests): `import { t } from '@saf-shekan/i18n'` and `t('namespace', 'dotted.key', { name })`.
+- ICU placeholders are `{name}`. Keep `<Num>` around figures in the UI; put only the words in the catalog.
+
+Namespaces: `common`, `shell`, `console`, `watcher`, `reports`, `errors`, `dossier`, `engine`, `validation`, `swagger`, `cli`, `brokers`, `market`, `speech`, `match`, `queue`, `logs`.
+
+Keys are English and namespaced. A new sentence means a new key in the matching JSON file, then `pnpm --filter @saf-shekan/i18n build` so `dist/` stays current. Do not inline the Persian at the call site "for now".
+
+## Forbidden in `apps/**/src` and `packages/**/src`
+
+- Arabic-script characters (U+0600–U+06FF) inside quotes, template literals, JSX text, or regex literals.
+- A new user-visible English label hardcoded in a component. Short product tokens (`HFT`, `VWAP`, `Tick`) also live in the catalog so a later locale can change them.
+- Returning Persian risk words. Risk is the code `low | medium | high | unknown`. Translate the label at the edge.
+- Storing a Persian sentence as an enum or status code. Use a stable English code (`manual`) and translate when the text is shown.
+- Copy-pasting a catalog sentence into a test. Assert `t('namespace', 'key')`.
+
+## Allowed to stay as data
+
+- Comments.
+- Markdown (`README.md`, `DEPLOYMENT.md`).
+- Ticker symbols, company names, and other market fields that arrived from TSETMC or the broker. Do not translate them, and do not retype them into `src` as UI copy.
+- Test fixtures under `**/test/**` may contain ticker symbols. They may not invent a second copy of a product sentence.
+
+## Matchers for external Persian
+
+Broker and supervisor text is Persian that we do not control. Detect it with `t('match', ...)` or `t('speech', ...)`, not with a literal in the parser. Character normalization (Arabic yeh/kaf) uses those match keys too.
+
+## Checks
+
+`packages/i18n/test/no-hardcoded-fa.test.ts` fails the build when production `src` contains Persian outside the catalog. Do not weaken that test to land a string. Add the key instead.

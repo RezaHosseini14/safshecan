@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,7 @@ function SunIcon() {
 }
 
 export function HeaderActions() {
+  const t = useTranslations('shell');
   const { resolvedTheme, setTheme } = useTheme();
   const light = resolvedTheme === 'light';
 
@@ -57,8 +59,8 @@ export function HeaderActions() {
         variant="ghost"
         size="icon"
         className={cn(iconChrome, 'text-amber-400 hover:text-amber-400')}
-        title="آزمایشگاه / فیچرهای بتا"
-        aria-label="آزمایشگاه / فیچرهای بتا"
+        title={t('lab')}
+        aria-label={t('lab')}
       >
         <BeakerIcon />
       </Button>
@@ -67,8 +69,8 @@ export function HeaderActions() {
         variant="ghost"
         size="icon"
         className={cn(iconChrome, 'text-cyan-400 hover:text-cyan-400')}
-        title="تغییر پوسته"
-        aria-label={light ? 'تغییر پوسته به تیره' : 'تغییر پوسته به روشن'}
+        title={t('theme')}
+        aria-label={light ? t('themeDark') : t('themeLight')}
         aria-pressed={light}
         onClick={() => setTheme(light ? 'dark' : 'light')}
       >

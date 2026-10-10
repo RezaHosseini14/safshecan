@@ -1,0 +1,29 @@
+{
+  "nav": {
+    "dashboard": "داشبورد",
+    "watcher": "تحلیل و دیده‌بان TSETMC",
+    "reports": "گزارش‌ها"
+  },
+  "state": {
+    "IDLE": "آماده دریافت",
+    "ARMED": "آماده‌باش",
+    "PRE_WARMING": "پیش‌گرمایش",
+    "FIRING": "شلیک رگباری",
+    "COMPLETED": "پایان ماموریت",
+    "CANCELLED": "لغو شد",
+    "ERROR": "خطای شلیک"
+  },
+  "disconnected": "قطع اتصال",
+  "ping": "PING:",
+  "ntpOffset": "NTP Offset:",
+  "emergencyStop": "توقف اضطراری",
+  "footerAside": "v2.0 Next.js Ultra HFT | High Precision hrtime & NTP Sync",
+  "footerConsole": "صف‌شکن (SafShekan) - ترمینال سرخطی‌زن فوق‌سریع بورس تهران",
+  "footerReports": "صف‌شکن (SafShekan) - آرشیو معاملات و آمار میلی‌ثانیه‌ای",
+  "footerReportsAside": "TSE High-Frequency Execution Logs",
+  "footerWatcher": "صف‌شکن — تحلیل و دیده‌بان TSETMC",
+  "lab": "آزمایشگاه / فیچرهای بتا",
+  "theme": "تغییر پوسته",
+  "themeDark": "تغییر پوسته به تیره",
+  "themeLight": "تغییر پوسته به روشن"
+}

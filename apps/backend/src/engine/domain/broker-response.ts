@@ -1,3 +1,4 @@
+import { t } from '@saf-shekan/i18n';
 import type { BrokerAnalysis } from './ports.js';
 
 function readQueueRank(json: Record<string, unknown>): number | undefined {
@@ -28,7 +29,7 @@ function readString(record: Record<string, unknown> | null, key: string): string
 
 export function analyzeBrokerResponse(statusCode: number, rawText: string): BrokerAnalysis {
   if (statusCode < 200 || statusCode >= 300) {
-    let errorMessage = `کد خطای HTTP ${statusCode}`;
+    let errorMessage = t('common', 'httpError', { status: statusCode });
     let queueRank: number | undefined;
     try {
       const json = asRecord(JSON.parse(rawText));
@@ -95,7 +96,11 @@ export function analyzeBrokerResponse(statusCode: number, rawText: string): Brok
 
     return { isSuccess: true, trackingCode, queueRank };
   } catch {
-    if (rawText.includes('ثبت شد') || rawText.includes('موفق') || rawText.includes('success')) {
+    if (
+      rawText.includes(t('match', 'registered')) ||
+      rawText.includes(t('match', 'success')) ||
+      rawText.includes('success')
+    ) {
       return { isSuccess: true };
     }
     return { isSuccess: false, errorMessage: rawText.slice(0, 150) };

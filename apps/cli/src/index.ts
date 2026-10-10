@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
 import { Command } from 'commander';
+import { t } from '@saf-shekan/i18n';
 import {
   TSE_HOURS,
   calculateBuyFee,
@@ -14,7 +15,7 @@ const program = new Command();
 
 const BANNER = `
 ${chalk.bold.hex('#38bdf8')('╔═════════════════════════════════════════════════════════════════════╗')}
-${chalk.bold.hex('#38bdf8')('║')}   ${chalk.bold.hex('#10b981')('🚀 SafShekan (صف‌شکن)')} - ${chalk.hex('#e2e8f0')('TSE High-Speed IPO & Sarkhati Engine')}   ${chalk.bold.hex('#38bdf8')('║')}
+${chalk.bold.hex('#38bdf8')('║')}   ${chalk.bold.hex('#10b981')(`🚀 ${t('cli', 'appTitle')}`)} - ${chalk.hex('#e2e8f0')('TSE High-Speed IPO & Sarkhati Engine')}   ${chalk.bold.hex('#38bdf8')('║')}
 ${chalk.bold.hex('#38bdf8')('║')}   ${chalk.hex('#94a3b8')('Version 2.0.0 Monorepo • Ultra-Low Latency Turbo Pipeline')}       ${chalk.bold.hex('#38bdf8')('║')}
 ${chalk.bold.hex('#38bdf8')('╚═════════════════════════════════════════════════════════════════════╝')}
 `;
@@ -64,11 +65,11 @@ program
     const breakEven = calculateBreakEvenPrice(price, farabourse);
 
     console.log(chalk.bold.hex('#f59e0b')('📊 TSE Fee & Capital Breakdown:'));
-    console.log(`  Nominal Value:    ${chalk.bold(buy.tradeValue.toLocaleString('fa-IR'))} تومان`);
-    console.log(`  Total Buy Cost:   ${chalk.yellow(buy.totalCost.toLocaleString('fa-IR'))} تومان (کارمزد خرید ۰.۳۷٪)`);
-    console.log(`  Required Capital: ${chalk.green(buy.netValue.toLocaleString('fa-IR'))} تومان`);
-    console.log(`  Total Sell Cost:  ${chalk.red(sell.totalCost.toLocaleString('fa-IR'))} تومان (کارمزد + مالیات ۰.۸۷٪)`);
-    console.log(`  Break-even Price: ${chalk.bold.hex('#38bdf8')(breakEven.toLocaleString('fa-IR'))} تومان (${((breakEven - price) / price * 100).toFixed(2)}% رشد برای خروج بدون زیان)`);
+    console.log(`  Nominal Value:    ${chalk.bold(buy.tradeValue.toLocaleString('fa-IR'))} ${t('cli', 'nominal')}`);
+    console.log(`  Total Buy Cost:   ${chalk.yellow(buy.totalCost.toLocaleString('fa-IR'))} ${t('cli', 'buyFee')}`);
+    console.log(`  Required Capital: ${chalk.green(buy.netValue.toLocaleString('fa-IR'))} ${t('cli', 'nominal')}`);
+    console.log(`  Total Sell Cost:  ${chalk.red(sell.totalCost.toLocaleString('fa-IR'))} ${t('cli', 'sellFee')}`);
+    console.log(`  Break-even Price: ${chalk.bold.hex('#38bdf8')(breakEven.toLocaleString('fa-IR'))} ${t('cli', 'breakEven', { percent: ((breakEven - price) / price * 100).toFixed(2) })}`);
   });
 
 // Command: Queue Estimator
@@ -88,7 +89,10 @@ program
     console.log(`  Estimated Rank:   #${estimate.estimatedPosition}`);
     console.log(`  Queue Tier:       ${chalk.hex(estimate.queueTier === 'VIP_FRONT' ? '#10b981' : '#f59e0b')(estimate.queueTier)}`);
     console.log(`  Fill Probability: ${chalk.bold(estimate.successProbabilityPercent + '%')}`);
-    console.log(`  Verdict:          ${chalk.italic(estimate.verdictFarsi)}`);
+    const rank = estimate.verdictRank;
+    console.log(
+      `  Verdict:          ${chalk.italic(t('queue', estimate.verdictKey, rank != null ? { rank } : undefined))}`
+    );
   });
 
 // Command: Presets

@@ -1,49 +1,53 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { IChartApi, IPriceLine, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import { CandlestickChart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Num } from '@/components/num';
-import type { LiveQuote } from '@/lib/api';
+import type { DossierCandle, DossierTrade, LiveQuote, MarketDossier } from '@/lib/api';
 import { formatNumber } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-const RANGES = ['روزانه', '15M', '5M', '1M', 'Tick'] as const;
-const SESSION = ['09:00', '10:00', '11:00', '12:00', '12:30 (پایان بازار)'];
+const RANGES = [
+  { id: 'D' },
+  { id: 'M15', minute: '15' },
+  { id: 'M5', minute: '5' },
+  { id: 'M1', minute: '1' },
+  { id: 'tick' },
+] as const;
 
-type Sample = { time: number; price: number; volume: number };
-type SampleBucket = { symbol: string; samples: Sample[]; key: string };
+type RangeId = (typeof RANGES)[number]['id'];
 
-const EMPTY_SAMPLES: Sample[] = [];
+const EMPTY_SERIES: DossierCandle[] = [];
 
-function withQuoteSample(current: SampleBucket, symbol: string, quote: LiveQuote | null): SampleBucket {
-  if (!quote || quote.symbol !== symbol || quote.lastPrice <= 0) {
-    return current.symbol === symbol ? current : { symbol, samples: EMPTY_SAMPLES, key: '' };
-  }
-  const key = `${quote.fetchedAt}:${quote.lastPrice}:${quote.volume}`;
-  if (current.symbol === symbol && current.key === key) return current;
-  const base = current.symbol === symbol ? current.samples : EMPTY_SAMPLES;
-  const parsed = Date.parse(quote.fetchedAt);
-  const time = Math.floor((Number.isFinite(parsed) ? parsed : Date.now()) / 1000);
-  const next = base.slice();
-  const last = next[next.length - 1];
-  const point = { time, price: quote.lastPrice, volume: quote.volume };
-  if (last && last.time === time) next[next.length - 1] = point;
-  else next.push(point);
-  return { symbol, samples: next.slice(-120), key };
+function pickRange(candles: MarketDossier['candles'] | null, preferred: RangeId): RangeId {
+  if ((candles?.[preferred]?.length ?? 0) > 0) return preferred;
+  return RANGES.find((item) => (candles?.[item.id]?.length ?? 0) > 0)?.id ?? preferred;
 }
 
-export function WatcherChart({ symbol, quote }: { symbol: string; quote: LiveQuote | null }) {
+export function WatcherChart({
+  quote,
+  candles,
+  vwap,
+  largestTrade,
+}: {
+  quote: LiveQuote | null;
+  candles: MarketDossier['candles'] | null;
+  vwap: number | null;
+  largestTrade: DossierTrade | null;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const ceilingLineRef = useRef<IPriceLine | null>(null);
-  const [bucket, setBucket] = useState<SampleBucket>({ symbol, samples: EMPTY_SAMPLES, key: '' });
+  const vwapLineRef = useRef<IPriceLine | null>(null);
   const [ready, setReady] = useState(false);
-  const resolved = withQuoteSample(bucket, symbol, quote);
-  if (resolved !== bucket) setBucket(resolved);
-  const samples = resolved.samples;
+  const [range, setRange] = useState<RangeId>('M1');
+  const activeRange = pickRange(candles, range);
+  const series = candles?.[activeRange] ?? EMPTY_SERIES;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -71,16 +75,27 @@ export function WatcherChart({ symbol, quote }: { symbol: string; quote: LiveQuo
           horzLine: { color: 'rgba(78,222,163,0.35)' },
         },
       });
-      const series = chart.addSeries(lib.AreaSeries, {
-        lineColor: '#4edea3',
-        topColor: 'rgba(78, 222, 163, 0.32)',
-        bottomColor: 'rgba(78, 222, 163, 0)',
-        lineWidth: 2,
+      const candles = chart.addSeries(lib.CandlestickSeries, {
+        upColor: '#4edea3',
+        downColor: '#fb7185',
+        borderUpColor: '#4edea3',
+        borderDownColor: '#fb7185',
+        wickUpColor: '#4edea3',
+        wickDownColor: '#fb7185',
         priceLineVisible: true,
         lastValueVisible: true,
       });
+      const volume = chart.addSeries(lib.HistogramSeries, {
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+        color: '#4edea3',
+      });
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: { top: 0.75, bottom: 0 },
+      });
       chartRef.current = chart;
-      seriesRef.current = series;
+      seriesRef.current = candles;
+      volumeRef.current = volume;
       if (!dead) setReady(true);
     });
 
@@ -90,34 +105,34 @@ export function WatcherChart({ symbol, quote }: { symbol: string; quote: LiveQuo
       chart?.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      volumeRef.current = null;
       ceilingLineRef.current = null;
+      vwapLineRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    const series = seriesRef.current;
-    if (!series || !ready) return;
-    series.setData(samples.map((sample) => ({ time: sample.time as UTCTimestamp, value: sample.price })));
-    if (ceilingLineRef.current) {
-      series.removePriceLine(ceilingLineRef.current);
-      ceilingLineRef.current = null;
-    }
-    const ceiling = quote?.pMax;
-    if (ceiling && ceiling > 0) {
-      ceilingLineRef.current = series.createPriceLine({
-        price: ceiling,
-        color: '#4edea3',
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: '',
-      });
-    }
-  }, [samples, quote?.pMax, ready]);
+    const candles = seriesRef.current;
+    const volume = volumeRef.current;
+    if (!candles || !volume || !ready) return;
+    const points = uniquePoints(series);
+    candles.setData(points.map(candlePoint));
+    volume.setData(points.map((point) => ({
+      time: point.time as UTCTimestamp,
+      value: point.volume,
+      color: point.close >= point.open ? 'rgba(78,222,163,0.55)' : 'rgba(251,113,133,0.55)',
+    })));
+    replaceLine(candles, ceilingLineRef, quote?.pMax && quote.pMax > 0 ? quote.pMax : null, '#4edea3');
+    replaceLine(candles, vwapLineRef, vwap && vwap > 0 ? vwap : null, '#38bdf8');
+  }, [series, quote?.pMax, vwap, ready]);
 
-  const deltas = volumeDeltas(samples).slice(-9);
-  const maxDelta = deltas.reduce((max, value) => (value > max ? value : max), 0);
+  const t = useTranslations('watcher');
+  const tc = useTranslations('common');
+  const maxVolume = series.reduce((max, candle) => (candle.volume > max ? candle.volume : max), 0);
   const ceiling = quote?.pMax && quote.pMax > 0 ? quote.pMax : null;
+  const labels = axisLabels(series);
+  const largestLabel =
+    largestTrade != null ? `${formatNumber(largestTrade.price)} / ${formatNumber(largestTrade.volume)}` : null;
 
   return (
     <section className="glass-card flex flex-col gap-4 rounded-xl p-5">
@@ -126,21 +141,22 @@ export function WatcherChart({ symbol, quote }: { symbol: string; quote: LiveQuo
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#4edea3]/25 bg-[#4edea3]/10 text-[#4edea3]">
             <CandlestickChart className="h-5 w-5" />
           </span>
-          <span className="text-sm font-bold text-white">تحلیل تکنیکال و جریان نقدینگی دِلتای درون‌روز</span>
+          <span className="text-sm font-bold text-white">{t('chartTitle')}</span>
         </div>
         <div className="flex items-center gap-1 self-start rounded-lg border border-white/10 bg-white/4 p-1 text-xs sm:self-auto">
-          {RANGES.map((range) => {
-            const active = range === '1M';
-            const minute = range.endsWith('M') ? range.slice(0, -1) : null;
+          {RANGES.map((item) => {
+            const available = (candles?.[item.id]?.length ?? 0) > 0;
+            const active = activeRange === item.id && available;
             return (
               <Button
-                key={range}
+                key={item.id}
                 type="button"
                 variant="ghost"
                 size="sm"
-                disabled={!active}
+                disabled={!available}
                 aria-pressed={active}
-                title={active ? 'نمونه‌های زندهٔ همین صفحه' : 'تاریخچهٔ این بازه از سرور نمی‌رسد'}
+                title={available ? t('rangeReady') : t('rangeMissing')}
+                onClick={() => setRange(item.id)}
                 className={cn(
                   'h-7 px-2.5',
                   active
@@ -148,12 +164,14 @@ export function WatcherChart({ symbol, quote }: { symbol: string; quote: LiveQuo
                     : 'text-slate-500'
                 )}
               >
-                {minute != null ? (
+                {'minute' in item ? (
                   <>
-                    <Num>{minute}</Num>M
+                    <Num>{item.minute}</Num>M
                   </>
+                ) : item.id === 'tick' ? (
+                  t('range.tick')
                 ) : (
-                  range
+                  t('range.D')
                 )}
               </Button>
             );
@@ -163,53 +181,45 @@ export function WatcherChart({ symbol, quote }: { symbol: string; quote: LiveQuo
 
       <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-slate-500">
         <div className="flex flex-wrap items-center gap-4">
-          <Legend swatch="bg-[#4edea3]" label="نرخ سقف" value={ceiling != null ? formatNumber(ceiling) : null} tone="text-[#4edea3]" />
-          <Legend swatch="bg-[#38bdf8]" label="VWAP" value={null} tone="text-[#38bdf8]" />
-          <Legend swatch="bg-[#ffb95f]" label="اردر بلوکی حقیقی" value={null} tone="text-[#ffb95f]" />
+          <Legend swatch="bg-[#4edea3]" label={t('ceilingRate')} value={ceiling != null ? formatNumber(ceiling) : null} tone="text-[#4edea3]" />
+          <Legend swatch="bg-[#38bdf8]" label={t('vwap')} value={vwap != null ? formatNumber(Math.round(vwap)) : null} tone="text-[#38bdf8]" />
+          <Legend
+            swatch="bg-[#ffb95f]"
+            label={largestTrade?.kind === 'normal' ? t('largestNormal') : t('largestBlock')}
+            value={largestLabel}
+            tone="text-[#ffb95f]"
+          />
+          <Legend
+            swatch="bg-white/40"
+            label={t('barVolume')}
+            value={maxVolume > 0 ? formatNumber(maxVolume) : null}
+            tone="text-slate-400"
+          />
         </div>
       </div>
 
       <div className="relative flex h-[320px] flex-col overflow-hidden rounded-xl border border-white/6 bg-[#05070d]/90 p-3">
         <div ref={hostRef} className="relative z-10 min-h-0 w-full flex-1" />
-        {samples.length === 0 ? (
+        {series.length === 0 ? (
           <p className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center text-xs text-slate-500">
-            داده‌ای از سرور نرسیده
+            {t('noSeries')}
           </p>
         ) : null}
         {ceiling != null ? (
           <div className="absolute start-3 top-3 z-20 flex items-center gap-2 rounded-md border border-white/10 bg-black/70 px-2.5 py-1 text-xs text-[#4edea3] backdrop-blur-md">
             <span className="h-2 w-2 animate-ping rounded-full bg-[#4edea3]" />
             <span>
-              سقف مجاز: <Num>{formatNumber(ceiling)}</Num> ریال
-              {quote && quote.lastPrice >= ceiling * 0.999 ? ' (صف بسته)' : ''}
+              {t('ceilingLineLead')} <Num>{formatNumber(ceiling)}</Num> {tc('rial')}
+              {quote && quote.lastPrice >= ceiling * 0.999 ? ` ${t('queueClosed')}` : ''}
             </span>
           </div>
         ) : null}
         <div className="relative z-20 flex items-center justify-between border-t border-white/6 pt-2 text-xs text-slate-500">
-          {SESSION.map((label) => (
-            <span key={label} className={label.startsWith('12:30') ? 'font-bold text-[#4edea3]' : undefined}>
-              <Num>{label.slice(0, 5)}</Num>
-              {label.slice(5)}
+          {labels.length === 0 ? <span>—</span> : null}
+          {labels.map((label) => (
+            <span key={label}>
+              <Num>{label}</Num>
             </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2.5 rounded-xl border border-white/5 bg-[#05070d]/60 p-3.5">
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <span>حجم تجمیعی نوسان‌گیری (Volume Delta)</span>
-          <span>
-            Max: <Num className="font-bold text-[#4edea3]">{maxDelta > 0 ? formatNumber(maxDelta) : '—'}</Num>
-          </span>
-        </div>
-        <div className="flex h-10 w-full items-end gap-1.5 pt-1">
-          {deltas.length === 0 ? <span className="text-[11px] text-slate-500">—</span> : null}
-          {deltas.map((delta, index) => (
-            <span
-              key={`${index}-${delta}`}
-              className="flex-1 rounded-t bg-[#4edea3]"
-              style={{ height: `${Math.max(8, (delta / maxDelta) * 100)}%` }}
-            />
           ))}
         </div>
       </div>
@@ -228,12 +238,54 @@ function Legend({ swatch, label, value, tone }: { swatch: string; label: string;
   );
 }
 
-function volumeDeltas(samples: Sample[]): number[] {
-  if (samples.length === 0) return [];
-  if (samples.length === 1) return [samples[0].volume];
-  const deltas: number[] = [];
-  for (let index = 1; index < samples.length; index += 1) {
-    deltas.push(Math.max(0, samples[index].volume - samples[index - 1].volume));
+function candlePoint(candle: DossierCandle) {
+  const close = candle.close;
+  const open = candle.open > 0 ? candle.open : close;
+  const high = Math.max(candle.high > 0 ? candle.high : close, open, close);
+  const low = Math.min(candle.low > 0 ? candle.low : close, open, close);
+  return { time: candle.time as UTCTimestamp, open, high, low, close };
+}
+
+function uniquePoints(candles: DossierCandle[]): DossierCandle[] {
+  const byTime = new Map<number, DossierCandle>();
+  for (const candle of candles) {
+    if (candle.close <= 0) continue;
+    byTime.set(candle.time, candle);
   }
-  return deltas;
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
+}
+
+function axisLabels(candles: DossierCandle[]): string[] {
+  if (candles.length === 0) return [];
+  if (candles.length <= 5) return candles.map((candle) => candle.label);
+  const spots = [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(ratio * (candles.length - 1)));
+  const seen = new Set<number>();
+  const labels: string[] = [];
+  for (const index of spots) {
+    if (seen.has(index)) continue;
+    seen.add(index);
+    labels.push(candles[index].label);
+  }
+  return labels;
+}
+
+function replaceLine(
+  series: ISeriesApi<'Candlestick'>,
+  slot: { current: IPriceLine | null },
+  price: number | null,
+  color: string
+) {
+  if (slot.current) {
+    series.removePriceLine(slot.current);
+    slot.current = null;
+  }
+  if (price == null || price <= 0) return;
+  slot.current = series.createPriceLine({
+    price,
+    color,
+    lineWidth: 1,
+    lineStyle: 2,
+    axisLabelVisible: true,
+    title: '',
+  });
 }

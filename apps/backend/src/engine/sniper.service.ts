@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import { BotConfigService } from '../bot-config/bot-config.service.js';
 import { NestTimeSyncService } from '../clock/time-sync.service.js';
 import { SniperGateway } from '../realtime/sniper.gateway.js';
@@ -53,7 +54,7 @@ export class SniperService implements OnModuleInit, OnModuleDestroy {
         },
       });
     }, 100);
-    this.logger.log('✓ موتور سرخطی دقیق و تپش ساعت اتمی (Atomic Clock Ticker) فعال شد.');
+    this.logger.log(t('logs', 'engineReady'));
   }
 
   onModuleDestroy() {
@@ -87,7 +88,7 @@ export class SniperService implements OnModuleInit, OnModuleDestroy {
 
   public testManualShoot() {
     const config = this.configService.getConfig();
-    this.logger.log(`ارسال شلیک آزمایشی به ${config.network.targetUrl}...`);
+    this.logger.log(t('logs', 'testShotSend', { url: config.network.targetUrl }));
     return this.engine.testManualShoot();
   }
 }

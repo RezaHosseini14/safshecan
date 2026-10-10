@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import type { ShotResult } from '@saf-shekan/core';
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Download, Printer, ScrollText, Search } from 'lucide-react';
 import { Num } from '@/components/num';
@@ -21,14 +22,16 @@ const RTT_SCALE_MS = 150;
 type ShotFilter = 'all' | 'success' | 'failed' | 'fast';
 type StatusFilter = 'all' | '200' | 'error';
 
-const FILTERS: { id: ShotFilter; label: string }[] = [
-  { id: 'all', label: 'همه شلیک‌ها' },
-  { id: 'success', label: 'شلیک‌های موفق (200 OK)' },
-  { id: 'failed', label: 'خطاهای کارگزاری' },
-  { id: 'fast', label: 'تاخیر زیر ۲۰ میلی‌ثانیه' },
+const FILTERS: { id: ShotFilter; labelKey: 'filter.all' | 'filter.success' | 'filter.failed' | 'filter.fast' }[] = [
+  { id: 'all', labelKey: 'filter.all' },
+  { id: 'success', labelKey: 'filter.success' },
+  { id: 'failed', labelKey: 'filter.failed' },
+  { id: 'fast', labelKey: 'filter.fast' },
 ];
 
 export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
+  const t = useTranslations('reports');
+  const tc = useTranslations('common');
   const [archived, setArchived] = useState<ShotResult[]>([]);
   const [filter, setFilter] = useState<ShotFilter>('all');
   const [status, setStatus] = useState<StatusFilter>('all');
@@ -109,9 +112,9 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xl" aria-hidden="true">📊</span>
-            <h1 className="text-xl font-black tracking-tight text-white md:text-2xl">کارنامه، آرشیو و تحلیل آماری شلیک‌ها</h1>
+            <h1 className="text-xl font-black tracking-tight text-white md:text-2xl">{t('title')}</h1>
           </div>
-          <p className="text-xs text-slate-400">بررسی میلی‌ثانیه‌ای کلیه بسته‌های ارسالی به هسته معاملات بورس و کارگزاری‌ها</p>
+          <p className="text-xs text-slate-400">{t('hint')}</p>
         </div>
         <div className="flex items-center gap-2.5">
           <Button
@@ -120,7 +123,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
             onClick={() => window.print()}
           >
             <Printer className="h-4 w-4" />
-            چاپ گزارش رسمی
+            {t('print')}
           </Button>
           <Button
             type="button"
@@ -129,13 +132,13 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
             onClick={exportCsv}
           >
             <Download className="h-4 w-4 text-cyan-400" />
-            خروجی اکسل (CSV)
+            {t('csv')}
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="درصد موفقیت کلی شلیک‌ها">
+        <KpiCard label={t('successRate')}>
           <p className="my-2 text-3xl font-extrabold tracking-tight text-emerald-400 md:text-4xl">
             {successRate == null ? <Num>—</Num> : <Num>{successRate.toFixed(1)}%</Num>}
           </p>
@@ -155,7 +158,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
           </div>
         </KpiCard>
 
-        <KpiCard label="میانگین تاخیر رفت‌وبرگشت (RTT)">
+        <KpiCard label={t('avgRtt')}>
           <p className="my-2 flex items-baseline text-cyan-400">
             <span className="text-3xl font-extrabold tracking-tight md:text-4xl">
               <Num>{avgLatency == null ? '—' : avgLatency.toFixed(1)}</Num>
@@ -177,33 +180,33 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
           </div>
         </KpiCard>
 
-        <KpiCard label="بهترین رتبه صف کسب‌شده">
+        <KpiCard label={t('bestRank')}>
           <div className="my-1.5 flex items-center justify-between gap-2">
             <p className="text-3xl font-black text-amber-400 md:text-4xl">
               {best ? <Num>#{best.queueRank}</Num> : <Num>—</Num>}
             </p>
             {best?.queueRank === 1 && best.symbol ? (
               <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[11px] font-bold text-amber-400">
-                صدر صف {best.symbol}
+                {t('frontOfQueue', { symbol: best.symbol })}
               </span>
             ) : null}
           </div>
           <p className="text-[11px] text-slate-400">
-            {best?.queueRank === 1 ? 'جایگاه ردیف اول ثبت شده در هسته' : best ? 'بهترین رتبه ثبت‌شده در پاسخ کارگزاری' : 'رتبه‌ای از کارگزاری نرسیده'}
+            {best?.queueRank === 1 ? t('rankFirst') : best ? t('rankBest') : t('rankMissing')}
           </p>
         </KpiCard>
 
-        <KpiCard label="مجموع حجم ریالی شلیک‌ها">
+        <KpiCard label={t('totalRial')}>
           <p className="my-1.5 flex items-baseline gap-1.5">
             <span className="text-2xl font-extrabold tracking-tight text-white md:text-3xl">
               <Num>{shots.length ? formatNumber(value) : '—'}</Num>
             </span>
-            {shots.length ? <span className="text-xs text-slate-400">ریال</span> : null}
+            {shots.length ? <span className="text-xs text-slate-400">{tc('rial')}</span> : null}
           </p>
           <p className="text-[11px] font-semibold text-emerald-400">
             {shots.length ? (
               <>
-                <Num>{success.length}</Num> تراکنش تایید شده
+                <Num>{success.length}</Num> {t('confirmedTail')}
               </>
             ) : (
               <Num>—</Num>
@@ -230,7 +233,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
                   setPage(1);
                 }}
               >
-                {item.label}
+                {t(item.labelKey)}
               </Button>
             );
           })}
@@ -239,7 +242,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
           <div className="relative min-w-[260px] flex-1 sm:flex-initial">
             <Input
               className="h-auto border-white/10 bg-[#0e1626] py-2 pl-9 pr-3 placeholder:text-slate-500 focus:border-emerald-500/40"
-              placeholder="جستجوی نماد، کد شلیک یا کارگزاری..."
+              placeholder={t('search')}
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
@@ -259,7 +262,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">همه کارگزاری‌ها</SelectItem>
+              <SelectItem value="all">{t('allBrokers')}</SelectItem>
               {brokers.map((name) => (
                 <SelectItem key={name} value={name}>
                   {name}
@@ -278,9 +281,9 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">همه وضعیت‌ها</SelectItem>
-              <SelectItem value="200">موفق (200)</SelectItem>
-              <SelectItem value="error">خطا (400 / 429)</SelectItem>
+              <SelectItem value="all">{t('allStatuses')}</SelectItem>
+              <SelectItem value="200">{t('statusOk')}</SelectItem>
+              <SelectItem value="error">{t('statusError')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -290,14 +293,14 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
         <Table>
           <TableHeader className="border-b border-white/[0.06] bg-white/[0.02] text-xs font-semibold text-slate-400">
             <TableRow className="border-0 hover:bg-transparent">
-              <TableHead className="px-4 py-3">شناسه (#SN)</TableHead>
-              <TableHead className="px-4 py-3">نماد بورسی</TableHead>
-              <TableHead className="px-4 py-3">کارگزاری</TableHead>
-              <TableHead className="px-4 py-3">زمان شلیک</TableHead>
-              <TableHead className="px-4 py-3">تاخیر (ms)</TableHead>
-              <TableHead className="px-4 py-3">کد وضعیت</TableHead>
-              <TableHead className="px-4 py-3">پیگیری / توضیحات</TableHead>
-              <TableHead className="px-4 py-3 text-center">ریپکت</TableHead>
+              <TableHead className="px-4 py-3">{t('colId')}</TableHead>
+              <TableHead className="px-4 py-3">{t('colSymbol')}</TableHead>
+              <TableHead className="px-4 py-3">{t('colBroker')}</TableHead>
+              <TableHead className="px-4 py-3">{t('colTime')}</TableHead>
+              <TableHead className="px-4 py-3">{t('colLatency')}</TableHead>
+              <TableHead className="px-4 py-3">{t('colStatus')}</TableHead>
+              <TableHead className="px-4 py-3">{t('colDetail')}</TableHead>
+              <TableHead className="px-4 py-3 text-center">{t('colReject')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-white/[0.04]">
@@ -329,11 +332,11 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                    title="مشاهده لاگ پکت"
+                    title={t('viewPacket')}
                     onClick={() => setInspected(shot)}
                   >
                     <ScrollText className="h-[18px] w-[18px]" />
-                    <span className="sr-only">مشاهده لاگ پکت</span>
+                    <span className="sr-only">{t('viewPacket')}</span>
                   </Button>
                 </TableCell>
               </TableRow>
@@ -341,7 +344,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
             {rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                  شلیکی برای نمایش نیست
+                  {t('empty')}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -349,7 +352,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
         </Table>
         <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-3.5 text-xs text-slate-400">
           <span>
-            نمایش <Num>{rows.length}</Num> از <Num>{filtered.length}</Num> مورد
+            {t('pageLead')} <Num>{rows.length}</Num> {t('pageMid')} <Num>{filtered.length}</Num> {t('pageTail')}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -361,7 +364,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
               onClick={() => setPage((value) => value - 1)}
             >
               <ChevronRight className="h-4 w-4" />
-              <span className="sr-only">قبلی</span>
+              <span className="sr-only">{tc('previous')}</span>
             </Button>
             <span className="px-2 text-slate-300">
               <Num>
@@ -377,7 +380,7 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
               onClick={() => setPage((value) => value + 1)}
             >
               <ChevronLeft className="h-4 w-4" />
-              <span className="sr-only">بعدی</span>
+              <span className="sr-only">{tc('next')}</span>
             </Button>
           </div>
         </div>
@@ -387,9 +390,9 @@ export function ReportsDesk({ liveShots }: { liveShots: ShotResult[] }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              بستهٔ شلیک <Num>#{inspected?.shotIndex}</Num>
+              {t('packetLead')} <Num>#{inspected?.shotIndex}</Num>
             </DialogTitle>
-            <DialogDescription>هدرهای حساس قبل از نمایش ماسک می‌شوند.</DialogDescription>
+            <DialogDescription>{t('packetHint')}</DialogDescription>
           </DialogHeader>
           {inspected ? (
             <p className="mb-3 text-xs text-slate-300">

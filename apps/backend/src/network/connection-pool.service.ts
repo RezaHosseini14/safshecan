@@ -1,4 +1,5 @@
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import { Agent, request, Dispatcher } from 'undici';
 
 @Injectable()
@@ -18,7 +19,7 @@ export class ConnectionPoolService implements OnModuleDestroy {
         timeout: 10000,
       },
     });
-    this.logger.log('✓ استخر اتصالات با کارایی بالا (High-Performance Connection Pool) فعال شد.');
+    this.logger.log(t('logs', 'poolReady'));
   }
 
   public getDispatcher(): Dispatcher {
@@ -44,7 +45,7 @@ export class ConnectionPoolService implements OnModuleDestroy {
 
       await res.body.dump();
       const latency = Date.now() - t0;
-      this.logger.log(`پیش‌گرمایش سوکت کارگزاری موفق بود (${latency}ms)`);
+      this.logger.log(t('logs', 'prewarmOk', { latency }));
       return latency;
     } catch {
       try {
@@ -81,7 +82,7 @@ export class ConnectionPoolService implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    this.logger.log('در حال تخریب استخر اتصالات و بستن سوکت‌های زنده...');
+    this.logger.log(t('logs', 'poolClose'));
     await this.agent.destroy();
   }
 }

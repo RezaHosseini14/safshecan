@@ -14,3 +14,4 @@ Next.js 16 App Router. Before a new framework API, read the matching page in `ap
 - Interactive controls use `@/components/ui`. Do not use a raw `select`, `button`, `input`, or `dialog` when that primitive exists
 - The browser calls the Nest API only (`/api`, `/ws`). No broker or TSETMC HTTP from the client
 - Visual source is the Stitch terminal (dark canvas, Yekan/Vazirmatn text, JetBrains Mono numbers). Do not port ZARVA layouts
+- User-visible copy uses `useTranslations` / `t()` from `@saf-shekan/i18n`. Do not hardcode Persian. See `.cursor/rules/i18n.mdc`

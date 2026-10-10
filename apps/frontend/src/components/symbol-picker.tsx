@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslations } from 'next-intl';
 import type { SymbolItem } from '@saf-shekan/core';
+import { t } from '@saf-shekan/i18n';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { Num } from '@/components/num';
@@ -18,8 +20,14 @@ import { cn } from '@/lib/utils';
 const CATALOG_LIMIT = 10_000;
 const ROW_ESTIMATE = 52;
 
+const YEH = t('match', 'yeh');
+const YEH_FA = t('match', 'yehFa');
+const KAF = t('match', 'kaf');
+const KAF_FA = t('match', 'kafFa');
+const ZWNJ = t('match', 'zwnj');
+
 function fold(text: string): string {
-  return text.replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/\u200c/g, '').trim().toLowerCase();
+  return text.replaceAll(YEH, YEH_FA).replaceAll(KAF, KAF_FA).replaceAll(ZWNJ, '').trim().toLowerCase();
 }
 
 export function sharePrice(item: SymbolItem): number | null {
@@ -42,11 +50,12 @@ export function SymbolPicker({
   value,
   onQueryChange,
   onSelect,
-  label = 'نماد',
+  label,
   variant = 'button',
   open: openProp,
   onOpenChange,
   inputId,
+  detail = 'full',
 }: {
   value: string;
   onQueryChange: (query: string) => void;
@@ -56,7 +65,10 @@ export function SymbolPicker({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   inputId?: string;
+  detail?: 'full' | 'brief';
 }) {
+  const tm = useTranslations('market');
+  const pickerLabel = label ?? tm('pickerLabel');
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = openProp ?? uncontrolledOpen;
   const [catalog, setCatalog] = useState<SymbolItem[]>([]);
@@ -67,6 +79,7 @@ export function SymbolPicker({
   const followActive = useRef(false);
   const fieldRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const catalogGen = useRef(0);
   const setOpen = useCallback(
     (next: boolean) => {
       onOpenChange?.(next);
@@ -118,17 +131,24 @@ export function SymbolPicker({
     };
   }, [open, setOpen, variant]);
 
-  useEffect(() => {
-    let cancelled = false;
-    api.searchSymbols('', CATALOG_LIMIT).then((next) => {
-      if (cancelled) return;
+  const loadCatalog = useCallback(() => {
+    const gen = ++catalogGen.current;
+    api.searchSymbols('', CATALOG_LIMIT, { brief: detail === 'brief' }).then((next) => {
+      if (catalogGen.current !== gen) return;
       setCatalog(next);
       setCatalogState(next.length > 0 ? 'ready' : 'empty');
     });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [detail]);
+
+  useEffect(() => {
+    loadCatalog();
+  }, [loadCatalog]);
+
+  const revealField = () => {
+    setActive(0);
+    setOpen(true);
+    if (catalogState !== 'ready') loadCatalog();
+  };
 
   const needle = fold(variant === 'field' ? value : filter);
   const showCatalog =
@@ -178,7 +198,7 @@ export function SymbolPicker({
               setActive(0);
             }}
             onKeyDown={onSearchKeyDown}
-            placeholder="جستجوی نماد، نام یا ISIN"
+            placeholder={tm('pickerSearch')}
           />
         </Command>
       ) : null}
@@ -187,6 +207,7 @@ export function SymbolPicker({
         catalogState={catalogState}
         active={active}
         pickedSymbol={pickedSymbol}
+        brief={detail === 'brief'}
         followActive={followActive}
         onActive={setActive}
         onChoose={choose}
@@ -206,12 +227,13 @@ export function SymbolPicker({
             setActive(0);
             setOpen(true);
           }}
-          onFocus={() => {
-            setActive(0);
-            setOpen(true);
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            revealField();
           }}
+          onFocus={revealField}
           onKeyDown={onSearchKeyDown}
-          placeholder="جستجوی نماد، نام شرکت یا صنعت (فزر، اهرم، شپنا)..."
+          placeholder={tm('pickerSearchLong')}
           className="h-auto w-full rounded-lg border-white/10 bg-[rgba(5,7,13,0.85)] py-2 pr-11 pl-24 font-sans text-xs text-[#dfe2ef] transition-all placeholder:text-[#4a5568] focus:border-[#4edea3]/40 focus:ring-0"
         />
         <div
@@ -239,7 +261,7 @@ export function SymbolPicker({
 
   return (
     <div>
-      <Label className="mb-2 block">{label}</Label>
+      <Label className="mb-2 block">{pickerLabel}</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -247,7 +269,7 @@ export function SymbolPicker({
             variant="outline"
             className="h-10 w-full justify-between border-white/10 bg-[#141924] px-3 text-xs font-normal text-slate-100 hover:bg-[#141924] hover:text-slate-100 focus:border-emerald-500 data-[state=open]:border-emerald-500"
           >
-            <span className={value ? 'truncate' : 'truncate text-slate-400'}>{value || 'نماد را انتخاب کنید'}</span>
+            <span className={value ? 'truncate' : 'truncate text-slate-400'}>{value || tm('pickerEmptyValue')}</span>
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
           </Button>
         </PopoverTrigger>
@@ -262,6 +284,7 @@ function SymbolVirtualList({
   catalogState,
   active,
   pickedSymbol,
+  brief,
   followActive,
   onActive,
   onChoose,
@@ -270,16 +293,18 @@ function SymbolVirtualList({
   catalogState: 'loading' | 'ready' | 'empty';
   active: number;
   pickedSymbol: string;
+  brief: boolean;
   followActive: { current: boolean };
   onActive: (index: number) => void;
   onChoose: (item: SymbolItem) => void;
 }) {
+  const tm = useTranslations('market');
   const listRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual returns functions React Compiler cannot memoize
   const virtualizer = useVirtualizer({
     count: symbols.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => ROW_ESTIMATE,
+    estimateSize: () => (brief ? 36 : ROW_ESTIMATE),
     overscan: 8,
   });
   const virtualizerRef = useRef(virtualizer);
@@ -294,10 +319,10 @@ function SymbolVirtualList({
   if (symbols.length === 0) {
     const message =
       catalogState === 'loading'
-        ? 'در حال بارگذاری نمادها…'
+        ? tm('pickerLoading')
         : catalogState === 'empty'
-          ? 'فهرست نمادها از سرور نرسید'
-          : 'نمادی پیدا نشد';
+          ? tm('pickerFailed')
+          : tm('pickerNone');
     return <p className="py-6 text-center font-sans text-xs text-slate-400">{message}</p>;
   }
 
@@ -317,6 +342,7 @@ function SymbolVirtualList({
             >
               <SymbolRow
                 item={item}
+                brief={brief}
                 selected={virtualRow.index === active}
                 chosen={pickedSymbol !== '' && fold(item.symbol) === fold(pickedSymbol)}
                 onHover={() => onActive(virtualRow.index)}
@@ -332,17 +358,21 @@ function SymbolVirtualList({
 
 function SymbolRow({
   item,
+  brief,
   selected,
   chosen,
   onHover,
   onChoose,
 }: {
   item: SymbolItem;
+  brief: boolean;
   selected: boolean;
   chosen: boolean;
   onHover: () => void;
   onChoose: () => void;
 }) {
+  const tm = useTranslations('market');
+  const tc = useTranslations('common');
   const price = sharePrice(item);
   const change = changeLabel(item);
   return (
@@ -362,18 +392,19 @@ function SymbolRow({
         <span className="shrink-0 font-bold">{item.symbol}</span>
         <span className="truncate font-normal text-slate-400">{item.name}</span>
       </span>
+      {brief ? null : (
       <span className="flex gap-x-3 overflow-hidden text-[10px] font-normal text-nowrap text-slate-400">
         {item.market ? <span>{item.market}</span> : null}
         {price != null ? (
           <span>
             <Num className="text-slate-200">{formatNumber(price)}</Num>
-            <span className="ms-1">ریال</span>
+            <span className="ms-1">{tc('rial')}</span>
             <span className="ms-1 text-slate-500">
-              (<Num>{formatNumber(tomanFromRial(price))}</Num> تومان)
+              (<Num>{formatNumber(tomanFromRial(price))}</Num> {tc('toman')})
             </span>
           </span>
         ) : (
-          <span>قیمت: —</span>
+          <span>{tc('priceEmpty')}</span>
         )}
         {change ? (
           <span className={change.tone}>
@@ -382,27 +413,28 @@ function SymbolRow({
         ) : null}
         {item.pMax != null && item.pMax > 0 ? (
           <span>
-            سقف <Num>{formatNumber(item.pMax)}</Num>
+            {tm('pickerCeiling')} <Num>{formatNumber(item.pMax)}</Num>
           </span>
         ) : null}
         {item.pMin != null && item.pMin > 0 ? (
           <span>
-            کف <Num>{formatNumber(item.pMin)}</Num>
+            {tm('pickerFloor')} <Num>{formatNumber(item.pMin)}</Num>
           </span>
         ) : null}
         {item.volume != null ? (
           <span>
-            حجم <Num>{formatNumber(item.volume)}</Num>
+            {tm('pickerVolume')} <Num>{formatNumber(item.volume)}</Num>
           </span>
         ) : null}
         {item.baseVolume != null && Number.isFinite(item.baseVolume) ? (
           <span>
-            حجم مبنا <Num>{formatNumber(item.baseVolume)}</Num>
+            {tm('pickerBase')} <Num>{formatNumber(item.baseVolume)}</Num>
           </span>
         ) : (
-          <span>حجم مبنا —</span>
+          <span>{tc('baseVolumeEmpty')}</span>
         )}
       </span>
+      )}
     </Button>
   );
 }

@@ -2,6 +2,7 @@ import https from 'node:https';
 import http from 'node:http';
 import os from 'node:os';
 import { Injectable, Logger } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 
 export interface RawMarketWatchItem {
   lva: string; // Symbol ticker (e.g., 'فزر')
@@ -81,6 +82,46 @@ export interface RawInstrumentSearchItem {
   flowTitle?: string;
 }
 
+/** Trade/GetTrade — one print. `canceled` ≠ 0 is dropped by the dossier. */
+export interface RawTradePrint {
+  dEven?: number;
+  hEven?: number;
+  nTran?: number;
+  qTitTran?: number;
+  pTran?: number;
+  canceled?: number;
+}
+
+/** ClosingPrice/GetClosingPriceDailyList row. */
+export interface RawDailyClose {
+  dEven?: number;
+  priceFirst?: number;
+  priceMin?: number;
+  priceMax?: number;
+  pClosing?: number;
+  pDrCotVal?: number;
+  qTotTran5J?: number;
+}
+
+/** Instrument/GetInstrumentInfo — float fields are optional and often absent. */
+export interface RawInstrumentInfo {
+  zTitad?: number;
+  baseVol?: number;
+  cgrValCotTitle?: string;
+  sector?: { lSecVal?: string };
+  eps?: {
+    epsValue?: number | string | null;
+    estimatedEPS?: number | string | null;
+    sectorPE?: number | string | null;
+  };
+  floatShares?: number;
+  freeFloat?: number;
+  floatingShares?: number;
+  floatPercent?: number;
+  floatingPercent?: number;
+  freeFloatPercent?: number;
+}
+
 export interface RawSupervisorMsg {
   tseMsgIdn?: number;
   dEven?: number; // Date e.g. 20261006
@@ -105,9 +146,10 @@ export interface DetectedIPO {
 export function normalizePersian(str: string): string {
   if (!str) return '';
   return str
-    .replace(/ي/g, 'ی')
-    .replace(/ك/g, 'ک')
-    .replace(/ة/g, 'ه')
+    .replaceAll(t('match', 'yeh'), t('match', 'yehFa'))
+    .replaceAll(t('match', 'kaf'), t('match', 'kafFa'))
+    .replaceAll(t('match', 'teh'), t('match', 'heh'))
+    .replaceAll(t('match', 'zwnj'), '')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .trim();
 }
@@ -148,7 +190,7 @@ export class TsetmcClient {
         for (const a of addrs) {
           if (a.family === 'IPv4' && !a.internal && a.address) {
             this.preferredLocalAddress = a.address;
-            this.logger.debug(`اینترفیس شبکه محلی شناسایی شد: ${name} (${a.address})`);
+            this.logger.debug(t('logs', 'nic', { name, address: a.address }));
             return;
           }
         }
@@ -202,8 +244,8 @@ export class TsetmcClient {
           });
           res.on('end', () => {
             if (
-              data.includes('مسدود') ||
-              data.includes('دسترسی شما') ||
+              data.includes(t('match', 'blocked')) ||
+              data.includes(t('match', 'accessDenied')) ||
               data.includes('General Error Detected')
             ) {
               return reject(new Error(`TSETMC soft-block from ${url.pathname}`));
@@ -251,7 +293,7 @@ export class TsetmcClient {
         return await makeAttempt(this.preferredLocalAddress);
       } catch (err: any) {
         this.logger.debug(
-          `تلاش با آدرس محلی ${this.preferredLocalAddress} ناموفق بود: ${err.message}. تلاش با پیش‌فرض سیستم...`
+          t('logs', 'nicFail', { address: this.preferredLocalAddress, detail: err.message })
         );
       }
     }
@@ -303,6 +345,28 @@ export class TsetmcClient {
     return json?.clientType ?? null;
   }
 
+  /** Today's trade prints (`Trade/GetTrade`). */
+  public async fetchTrades(insCode: string): Promise<RawTradePrint[]> {
+    const url = `${TsetmcClient.CDN}/Trade/GetTrade/${encodeURIComponent(insCode)}`;
+    const json = await this.getJson<{ trade?: RawTradePrint[] }>(url, 18000);
+    return json?.trade || [];
+  }
+
+  /** Recent daily closes, newest or oldest depending on the CDN. */
+  public async fetchDailyCloses(insCode: string, count = 60): Promise<RawDailyClose[]> {
+    const n = Math.min(Math.max(Math.floor(count), 1), 100);
+    const url = `${TsetmcClient.CDN}/ClosingPrice/GetClosingPriceDailyList/${encodeURIComponent(insCode)}/${n}`;
+    const json = await this.getJson<{ closingPriceDaily?: RawDailyClose[] }>(url, 6000);
+    return json?.closingPriceDaily || [];
+  }
+
+  /** Static instrument card: sector, share count, float only when the CDN sends it. */
+  public async fetchInstrumentInfo(insCode: string): Promise<RawInstrumentInfo | null> {
+    const url = `${TsetmcClient.CDN}/Instrument/GetInstrumentInfo/${encodeURIComponent(insCode)}`;
+    const json = await this.getJson<{ instrumentInfo?: RawInstrumentInfo }>(url, 6000);
+    return json?.instrumentInfo ?? null;
+  }
+
   /** Resolve ticker/name → insCode via TSETMC search. */
   public async searchInstrument(query: string): Promise<RawInstrumentSearchItem[]> {
     const q = encodeURIComponent(query.trim());
@@ -319,7 +383,15 @@ export class TsetmcClient {
     const ipos: DetectedIPO[] = [];
     const seenSymbols = new Set<string>();
 
-    const ipoKeywords = ['عرضه اوليه', 'عرضه اولیه', 'پذیره‌نویسی', 'پذیره نویسی', 'حراج اولیه', 'سفارش‌گیری نماد', 'سفارش گیری نماد'];
+    const ipoKeywords = [
+      t('match', 'ipo0'),
+      t('match', 'ipo1'),
+      t('match', 'ipo2'),
+      t('match', 'ipo3'),
+      t('match', 'ipo4'),
+      t('match', 'ipo5'),
+      t('match', 'ipo6'),
+    ];
 
     for (const msg of messages) {
       const title = (msg.tseTitle || '').trim();
@@ -328,10 +400,10 @@ export class TsetmcClient {
 
       // Skip debt/treasury bill auctions
       if (
-        combined.includes('اوراق مالی اسلامی') ||
-        combined.includes('اوراق مالي اسلامي') ||
-        combined.includes('مظنه‌گیری') ||
-        combined.includes('مظنه‌گيري')
+        combined.includes(t('match', 'skip0')) ||
+        combined.includes(t('match', 'skip1')) ||
+        combined.includes(t('match', 'skip2')) ||
+        combined.includes(t('match', 'skip3'))
       ) {
         continue;
       }
@@ -349,13 +421,22 @@ export class TsetmcClient {
 
       // 2. نماد معاملاتی X or نماد X
       if (!matchedSymbol) {
-        const symbolPhraseMatch = combined.match(/نماد(?:\s+معاملاتی)?\s+([\u0600-\u06FF0-9]+)/);
+        const symbolPhraseMatch = combined.match(
+          new RegExp(
+            `${t('match', 'symbolWord')}(?:\\s+${t('match', 'tradingWord')})?\\s+([\\u0600-\\u06FF0-9]+)`
+          )
+        );
         if (symbolPhraseMatch) {
           matchedSymbol = symbolPhraseMatch[1].trim();
         }
       }
 
-      if (!matchedSymbol || matchedSymbol.length < 2 || matchedSymbol.includes('عام') || matchedSymbol.includes('سهام')) {
+      if (
+        !matchedSymbol ||
+        matchedSymbol.length < 2 ||
+        matchedSymbol.includes(t('match', 'aam')) ||
+        matchedSymbol.includes(t('match', 'saham'))
+      ) {
         continue;
       }
 
@@ -386,15 +467,24 @@ export class TsetmcClient {
       let status: 'UPCOMING' | 'ACTIVE_TODAY' | 'RECENT' = 'RECENT';
       const now = new Date();
       const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-      if (String(msg.dEven) === todayStr || combined.includes('امروز')) {
+      if (String(msg.dEven) === todayStr || combined.includes(t('match', 'today'))) {
         status = 'ACTIVE_TODAY';
-      } else if (combined.includes('روز چهار') || combined.includes('روز دو') || combined.includes('روز سه') || combined.includes('آینده')) {
+      } else if (
+        combined.includes(t('match', 'weekday0')) ||
+        combined.includes(t('match', 'weekday1')) ||
+        combined.includes(t('match', 'weekday2')) ||
+        combined.includes(t('match', 'future'))
+      ) {
         status = 'UPCOMING';
       }
 
       // Extract company name
       let companyName = '';
-      const compMatch = combined.match(/شرکت\s+([\u0600-\u06FF\s]+?)(?:\s+در\s+نماد|\s+با\s+نماد|\s*[\(（]|\s+به\s+روش)/);
+      const compMatch = combined.match(
+        new RegExp(
+          `${t('match', 'companyWord')}\\s+([\\u0600-\\u06FF\\s]+?)(?:\\s+${t('match', 'inSymbol')}|\\s+${t('match', 'withSymbol')}|\\s*[\\(（]|\\s+${t('match', 'byMethod')})`
+        )
+      );
       if (compMatch) {
         companyName = compMatch[1].trim();
       }

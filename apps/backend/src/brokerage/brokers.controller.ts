@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { t } from '@saf-shekan/i18n';
 import { Throttle } from '@nestjs/throttler';
 import { redactBotConfig } from '../bot-config/redact.js';
 import { BrokersService } from './brokers.service.js';
@@ -11,7 +12,7 @@ export class BrokersController {
   constructor(private readonly brokersService: BrokersService) {}
 
   @Get('presets')
-  @ApiOperation({ summary: 'فهرست قالب‌های پیش‌فرض کارگزاری‌ها' })
+  @ApiOperation({ summary: t('swagger', 'presetList') })
   getPresets() {
     return {
       success: true,
@@ -21,8 +22,8 @@ export class BrokersController {
 
   @Post('presets/apply')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'اعمال قالب کارگزاری پیش‌فرض' })
-  @ApiResponse({ status: 200, description: 'قالب کارگزاری اعمال شد.' })
+  @ApiOperation({ summary: t('swagger', 'presetApply') })
+  @ApiResponse({ status: 200, description: t('swagger', 'presetApplied') })
   applyPreset(@Body() body: ApplyPresetDto) {
     const config = this.brokersService.applyPreset(body.presetId);
     return {
@@ -34,12 +35,12 @@ export class BrokersController {
   @Post('curl/parse')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  @ApiOperation({ summary: 'تحلیل هوشمند و استخراج پارامترها از دستور cURL' })
-  @ApiResponse({ status: 200, description: 'مشخصات استخراج‌شده و تنظیمات به‌روزرسانی شده' })
+  @ApiOperation({ summary: t('swagger', 'curlParse') })
+  @ApiResponse({ status: 200, description: t('swagger', 'curlParsed') })
   parseCurl(@Body() body: ParseCurlDto) {
     const rawCurl = body.curl || body.curlCommand;
     if (!rawCurl) {
-      throw new BadRequestException('دستور cURL ارسال نشده است.');
+      throw new BadRequestException(t('errors', 'curlMissing'));
     }
 
     const { parsed, config } = this.brokersService.parseCurl(rawCurl);

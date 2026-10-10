@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { AppShell } from '@/features/shell/app-shell';
 import { ReportsDesk } from '@/features/reports/reports-desk';
 import { api } from '@/lib/api';
 import { useSniperSocket } from '@/lib/use-sniper-socket';
 
 export default function ReportsPage() {
+  const t = useTranslations('shell');
   const socket = useSniperSocket();
   const { setEngineState, applyHttpTimeSync } = socket;
 
@@ -22,8 +24,8 @@ export default function ReportsPage() {
       engineState={socket.engineState}
       timeSync={socket.timeSync}
       connected={socket.connected}
-      footerNote="صف‌شکن (SafShekan) - آرشیو معاملات و آمار میلی‌ثانیه‌ای"
-      footerAside="TSE High-Frequency Execution Logs"
+      footerNote={t('footerReports')}
+      footerAside={t('footerReportsAside')}
       onDisarm={() => {
         void api.disarmSniper();
       }}

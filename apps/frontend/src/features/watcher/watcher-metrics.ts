@@ -1,6 +1,5 @@
 import type { SymbolItem } from '@saf-shekan/core';
 import type { LiveQuote, OrderBookLevel } from '@/lib/api';
-import { formatNumber } from '@/lib/format';
 
 export type WatcherFilter = 'growth' | 'flow' | 'block' | 'light-queue';
 
@@ -78,30 +77,25 @@ export function queueStats(levels: OrderBookLevel[]) {
   };
 }
 
-export function matchesFilter(filter: WatcherFilter | null, quote: LiveQuote | null): boolean {
+export function readPe(value: number | string | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function matchesFilter(
+  filter: WatcherFilter | null,
+  quote: LiveQuote | null,
+  options?: { hasBlock?: boolean }
+): boolean {
   if (!filter) return true;
+  if (filter === 'block') return options?.hasBlock === true;
   if (!quote) return false;
   if (filter === 'growth') return quote.changePercent > 0;
   if (filter === 'flow') {
     const net = netIndividualVolume(quote);
     return net != null && net > 0;
   }
-  if (filter === 'block') return false;
   const book = queueStats(quote.orderBook);
   return quote.changePercent > 0 && book.offers === 0 && book.buyers > 0;
-}
-
-export function summaryCopy(symbol: string, quote: LiveQuote | null, power: number | null): string {
-  if (!quote) return 'داده‌ای از سرور برای این نماد نرسیده است.';
-  const bits = [`آخرین قیمت ${symbol} برابر ${formatNumber(quote.lastPrice)} ریال است`];
-  if (Number.isFinite(quote.changePercent)) bits.push(`تغییر نسبت به دیروز ${formatPct(quote.changePercent)}`);
-  bits.push(`حجم معاملات ${formatNumber(quote.volume)} سهم`);
-  if (power != null) bits.push(`نسبت حجم خرید حقیقی به فروش حقیقی ${power.toFixed(2)} برابر است`);
-  return `${bits.join('. ')}.`;
-}
-
-export function actionCopy(quote: LiveQuote | null): string {
-  if (!quote) return 'پیشنهادی بدون دادهٔ زنده ساخته نمی‌شود.';
-  if (quote.stateTitle) return `وضعیت نماد از سرور: ${quote.stateTitle}.`;
-  return 'وضعیت تکنیکال از سرور نرسیده است.';
 }

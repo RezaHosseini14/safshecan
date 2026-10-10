@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import { createNestApp } from '../src/bootstrap.js';
 
 describe('NestJS Sniper Engine E2E', () => {
@@ -22,7 +23,7 @@ describe('NestJS Sniper Engine E2E', () => {
       .expect(200);
 
     expect(res.body.success).toBe(true);
-    expect(res.body.message).toContain('غیرفعال');
+    expect(res.body.message).toBe(t('engine', 'disarmed'));
   });
 
   it('POST /api/sniper/arm should handle future or past target time gracefully', async () => {

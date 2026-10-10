@@ -1,0 +1,19 @@
+---
+description: CodeGraph MCP usage guide — one tool, codegraph_explore
+alwaysApply: true
+---
+
+## CodeGraph
+
+This project has a CodeGraph index at `.codegraph/` (gitignored). The Cursor MCP server exposes one tool, `codegraph_explore`. CodeGraph is a tree-sitter knowledge graph of symbols, edges, and files.
+
+### Use codegraph_explore before Read or Grep
+
+For any structural question — how something works, how X reaches Y, what calls what, where a symbol is defined, or surveying an area — call `codegraph_explore` first, or run `codegraph explore "<question>"` when the MCP tool is unavailable. One call returns the relevant symbols' line-numbered source grouped by file, the call paths between them (including dynamic-dispatch hops), and a blast-radius summary. Name a file or symbol in the query to read its current source.
+
+### Rules of thumb
+
+- Answer from the graph. One `codegraph_explore` is usually enough; follow up with a more specific query if needed. Do not spawn a file-reading subagent or a grep loop for structure the index already has.
+- Trust the AST results. Re-check with Read or Grep only for a detail the graph did not cover, or for files it does not index (configs, docs, generated output).
+- If a response starts with a staleness banner, Read only the files listed there. Files not in that banner are current.
+- If `.codegraph/` is missing, run `codegraph init` from the repo root before exploring.

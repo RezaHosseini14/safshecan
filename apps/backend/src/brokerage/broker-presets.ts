@@ -1,3 +1,4 @@
+import { t } from '@saf-shekan/i18n';
 import { NetworkConfig } from '@saf-shekan/core';
 
 export interface BrokerPreset {
@@ -33,8 +34,8 @@ const JSON_HEADERS = {
 export const BROKER_PRESETS: BrokerPreset[] = [
   {
     id: 'tadbir',
-    name: 'سامانه تدبیرپرداز (آنلاین‌پلاس)',
-    description: 'سامان، فارابی، خوارزمی، مبین و ده‌ها کارگزاری مبتنی بر OnlinePlus',
+    name: t('brokers', 'preset.tadbir.name'),
+    description: t('brokers', 'preset.tadbir.description'),
     sampleUrl: 'https://onlineplus.tadbirpardaz.com/api/v1/Order/SendOrder',
     defaultHeaders: {
       ...JSON_HEADERS,
@@ -52,12 +53,12 @@ export const BROKER_PRESETS: BrokerPreset[] = [
       null,
       2
     ),
-    notes: 'بعد از انتخاب، آدرس و قالب بدنه سفارش روی تدبیر تنظیم می‌شود. برای شلیک واقعی، توکن Authorization را از cURL وارد کنید.',
+    notes: t('brokers', 'preset.tadbir.notes'),
   },
   {
     id: 'mofid',
-    name: 'مفید — ایزی‌تریدر (EasyTrader)',
-    description: 'سامانه وب کارگزاری مفید',
+    name: t('brokers', 'preset.mofid.name'),
+    description: t('brokers', 'preset.mofid.description'),
     sampleUrl: 'https://api.easytrader.emofid.com/core/api/v1/orders',
     defaultHeaders: {
       ...JSON_HEADERS,
@@ -74,12 +75,12 @@ export const BROKER_PRESETS: BrokerPreset[] = [
       null,
       2
     ),
-    notes: 'قالب API مفید اعمال شد. توکن Bearer را از Network مرورگر در بخش cURL جایگزین کنید.',
+    notes: t('brokers', 'preset.mofid.notes'),
   },
   {
     id: 'agah',
-    name: 'آگاه — سامانه آسا (ASA)',
-    description: 'موتور آنلاین کارگزاری آگاه',
+    name: t('brokers', 'preset.agah.name'),
+    description: t('brokers', 'preset.agah.description'),
     sampleUrl: 'https://asa.agah.com/api/v1/order',
     defaultHeaders: {
       ...JSON_HEADERS,
@@ -95,12 +96,12 @@ export const BROKER_PRESETS: BrokerPreset[] = [
       null,
       2
     ),
-    notes: 'قالب آگاه اعمال شد. معمولاً احراز هویت با کوکی نشست است — cURL کامل را پیست کنید.',
+    notes: t('brokers', 'preset.agah.notes'),
   },
   {
     id: 'farabixo',
-    name: 'فارابیکسو (Farabixo)',
-    description: 'سامانه معاملات آنلاین فارابی',
+    name: t('brokers', 'preset.farabixo.name'),
+    description: t('brokers', 'preset.farabixo.description'),
     sampleUrl: 'https://api.farabixo.com/api/v1/Order',
     defaultHeaders: {
       ...JSON_HEADERS,
@@ -115,12 +116,12 @@ export const BROKER_PRESETS: BrokerPreset[] = [
       null,
       2
     ),
-    notes: 'قالب فارابیکسو اعمال شد. هدرها و بدنه را با یک درخواست واقعی از DevTools تکمیل کنید.',
+    notes: t('brokers', 'preset.farabixo.notes'),
   },
   {
     id: 'sahra',
-    name: 'صحرا — داتکس',
-    description: 'سامانه برخط مبتنی بر موتور صحرا / داتکس',
+    name: t('brokers', 'preset.sahra.name'),
+    description: t('brokers', 'preset.sahra.description'),
     sampleUrl: 'https://online.sahra.ir/CustomerOrder/SendOrder',
     defaultHeaders: {
       ...JSON_HEADERS,
@@ -136,12 +137,12 @@ export const BROKER_PRESETS: BrokerPreset[] = [
       null,
       2
     ),
-    notes: 'قالب صحرا اعمال شد. کوکی نشست برای احراز هویت حیاتی است.',
+    notes: t('brokers', 'preset.sahra.notes'),
   },
   {
     id: 'custom',
-    name: 'سفارشی (از cURL)',
-    description: 'بهترین روش: استخراج کامل URL، هدر و بدنه از دستور cURL مرورگر',
+    name: t('brokers', 'preset.custom.name'),
+    description: t('brokers', 'preset.custom.description'),
     sampleUrl: 'https://broker.ir/api/order',
     defaultHeaders: {
       'Content-Type': 'application/json',
@@ -157,7 +158,7 @@ export const BROKER_PRESETS: BrokerPreset[] = [
       null,
       2
     ),
-    notes: 'حالت سفارشی: از کارت «ورود مشخصات از طریق cURL» دستور واقعی سفارش را پیست کنید تا همه چیز خودکار پر شود.',
+    notes: t('brokers', 'preset.custom.notes'),
   },
 ];
 

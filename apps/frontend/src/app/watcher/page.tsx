@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { AppShell } from '@/features/shell/app-shell';
 import { WatcherDesk } from '@/features/watcher/watcher-desk';
 import { api } from '@/lib/api';
 import { useSniperSocket } from '@/lib/use-sniper-socket';
 
 export default function WatcherPage() {
+  const t = useTranslations('shell');
   const socket = useSniperSocket();
   const { setEngineState, applyHttpTimeSync } = socket;
 
@@ -22,7 +24,7 @@ export default function WatcherPage() {
       engineState={socket.engineState}
       timeSync={socket.timeSync}
       connected={socket.connected}
-      footerNote="صف‌شکن — تحلیل و دیده‌بان TSETMC"
+      footerNote={t('footerWatcher')}
       onDisarm={() => {
         void api.disarmSniper();
       }}

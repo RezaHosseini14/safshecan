@@ -1,5 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { t } from '@saf-shekan/i18n';
 import { Throttle } from '@nestjs/throttler';
 import { NestTimeSyncService } from './time-sync.service.js';
 import { TimeOffsetDto } from './dto/time-offset.dto.js';
@@ -16,8 +17,8 @@ export class TimeSyncController {
   @Post('sync')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 15, ttl: 60000 } })
-  @ApiOperation({ summary: 'همگام‌سازی زمان با سرورهای NTP و HTTP' })
-  @ApiResponse({ status: 200, description: 'زمان با موفقیت کالیبره شد.' })
+  @ApiOperation({ summary: t('swagger', 'sync') })
+  @ApiResponse({ status: 200, description: t('swagger', 'syncOk') })
   async syncTime() {
     this.timeSyncService.releaseManualHold();
     const status = await this.timeSyncService.sync();
@@ -30,8 +31,8 @@ export class TimeSyncController {
 
   @Post('offset')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'تنظیم دستی اختلاف زمان (میلی‌ثانیه)' })
-  @ApiResponse({ status: 200, description: 'انحراف زمان به صورت دستی اعمال شد.' })
+  @ApiOperation({ summary: t('swagger', 'setOffset') })
+  @ApiResponse({ status: 200, description: t('swagger', 'offsetOk') })
   setOffset(@Body() body: TimeOffsetDto) {
     const status = this.timeSyncService.setManualOffset(body.offsetMs);
     this.scheduler.broadcast(status);

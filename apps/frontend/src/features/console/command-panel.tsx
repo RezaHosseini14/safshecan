@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Play, Zap } from 'lucide-react';
 import type { SniperState } from '@saf-shekan/core';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ export function CommandPanel({
   onDisarm: () => void;
   onTestShot: () => void;
 }) {
+  const t = useTranslations('console');
   const hot = isEngineHot(engineState);
 
   return (
@@ -31,7 +33,7 @@ export function CommandPanel({
       <div className="mb-4 flex items-center justify-between border-b border-white/6 pb-3">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20" />
-          <h2 className="text-sm font-bold">پنل فرماندهی شلیک فوق‌سریع</h2>
+          <h2 className="text-sm font-bold">{t('commandTitle')}</h2>
         </div>
         <div className="flex items-center gap-2">
           <Checkbox
@@ -39,31 +41,31 @@ export function CommandPanel({
             checked={antiDoubleSpend}
             onCheckedChange={(value) => onToggleAntiDoubleSpend(value === true)}
           />
-          <Label htmlFor="anti-double-spend">حفاظت ضد ارسال تکراری (Anti Double-Spend)</Label>
+          <Label htmlFor="anti-double-spend">{t('antiDoubleSpend')}</Label>
         </div>
       </div>
       <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-12">
         <div className="md:col-span-3">
           <Button type="button" variant="outline" className="h-12 w-full" disabled={loading} onClick={onTestShot}>
             <Zap className="h-4 w-4 text-cyan-400" />
-            شلیک تستی فوری (Dry Run)
+            {t('dryRun')}
           </Button>
         </div>
         <div className="md:col-span-6">
           {hot ? (
             <Button type="button" variant="destructive" className="h-12 w-full text-sm" disabled={loading} onClick={onDisarm}>
-              توقف اضطراری (DISARM)
+              {t('disarm')}
             </Button>
           ) : (
             <Button type="button" className="h-12 w-full text-sm" disabled={loading} onClick={onArm}>
-              مسلح‌سازی موتور سرخطی (ARM)
+              {t('arm')}
               <Play className="h-5 w-5 fill-current" />
             </Button>
           )}
         </div>
         <div className="text-xs md:col-span-3 md:text-end">
           <div className="text-[11px] text-slate-400">
-            وضعیت کنونی: <span className="font-bold text-amber-400">{engineState}</span>
+            {t('currentState')} <span className="font-bold text-amber-400">{engineState}</span>
           </div>
         </div>
       </div>

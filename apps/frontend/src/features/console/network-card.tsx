@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import { Wifi, Zap } from 'lucide-react';
 import { Num } from '@/components/num';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,8 @@ import { api } from '@/lib/api';
 import { isValidBrokerUrl } from '@/lib/security';
 
 export function NetworkCard({ targetUrl }: { targetUrl: string }) {
+  const t = useTranslations('console');
+  const tc = useTranslations('common');
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [warm, setWarm] = useState(false);
@@ -23,8 +26,8 @@ export function NetworkCard({ targetUrl }: { targetUrl: string }) {
             <Wifi className="h-5 w-5" />
           </span>
           <div>
-            <h3 className="text-sm font-bold">وضعیت شبکه و بهینه‌سازی تاخیر</h3>
-            <p className="text-[11px] text-slate-400">تست پینگ زنده و پیش‌گرمایش سوکت‌های TCP/TLS</p>
+            <h3 className="text-sm font-bold">{t('networkTitle')}</h3>
+            <p className="text-[11px] text-slate-400">{t('networkHint')}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -39,11 +42,11 @@ export function NetworkCard({ targetUrl }: { targetUrl: string }) {
                   setPingMs(res.pingMs);
                   setMessage(null);
                 })
-                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : 'پینگ ناموفق'));
+                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : t('pingFailed')));
             }}
           >
             <Zap className="h-3.5 w-3.5" />
-            تست پینگ
+            {t('pingTest')}
           </Button>
           <Button
             type="button"
@@ -56,18 +59,18 @@ export function NetworkCard({ targetUrl }: { targetUrl: string }) {
                   setWarm(res.success);
                   setMessage(res.message);
                 })
-                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : 'پیش‌گرمایش ناموفق'));
+                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : t('prewarmFailed')));
             }}
           >
-            پیش‌گرمایش سوکت (Pre-Warm)
+            {t('prewarm')}
           </Button>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="وضعیت TLS Handshake" value={warm ? 'Pre-Warmed' : '—'} />
-        <Metric label="آدرس هدف" value={url ? 'https' : 'ذخیره‌شده روی سرور'} />
-        <Metric label="پینگ HTTP" value={pingMs != null ? <><Num>{pingMs}</Num> ms</> : '—'} />
-        <Metric label="تاخیر مسیر (RTT)" value={rttMs != null ? <><Num>{rttMs}</Num> ms</> : '—'} />
+        <Metric label={t('tls')} value={warm ? t('prewarmed') : tc('dash')} />
+        <Metric label={t('targetUrl')} value={url ? 'https' : t('urlStored')} />
+        <Metric label={t('httpPing')} value={pingMs != null ? <><Num>{pingMs}</Num> ms</> : tc('dash')} />
+        <Metric label={t('rtt')} value={rttMs != null ? <><Num>{rttMs}</Num> ms</> : tc('dash')} />
       </div>
       {message ? <p className="mt-3 text-[11px] text-slate-400">{message}</p> : null}
     </section>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ChevronDown, Terminal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ export function CurlBar({
   authReady: boolean;
   onParse: (curl: string) => Promise<void>;
 }) {
+  const t = useTranslations('console');
   const [open, setOpen] = useState(false);
   const [curl, setCurl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,11 +29,11 @@ export function CurlBar({
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10 text-cyan-400">
             <Terminal className="h-4 w-4" />
           </span>
-          ورود مشخصات از طریق cURL مرورگر
+          {t('curlTitle')}
         </span>
         <span className="flex items-center gap-2">
-          <Badge variant={authReady ? 'emerald' : 'amber'}>{authReady ? 'AUTH: READY' : 'AUTH: PENDING'}</Badge>
-          <Badge>BROKER: {brokerLabel}</Badge>
+          <Badge variant={authReady ? 'emerald' : 'amber'}>{authReady ? t('authReady') : t('authPending')}</Badge>
+          <Badge>{t('brokerBadge', { label: brokerLabel })}</Badge>
           <ChevronDown className="h-4 w-4 text-slate-400" />
         </span>
       </button>
@@ -40,7 +42,7 @@ export function CurlBar({
           <Textarea
             value={curl}
             onChange={(event) => setCurl(event.target.value)}
-            placeholder="curl 'https://…' -H 'Authorization: …'"
+            placeholder={t('curlPlaceholder')}
             dir="ltr"
           />
           <Button
@@ -54,10 +56,10 @@ export function CurlBar({
                 .finally(() => setBusy(false));
             }}
           >
-            استخراج و اعمال
+            {t('curlApply')}
           </Button>
           <p className="text-[11px] text-slate-500">
-            مقدار {REDACTED_SECRET} در پاسخ سرور یعنی راز روی دیسک مانده و دوباره نمایش داده نمی‌شود.
+            {t('curlSecretHint', { secret: REDACTED_SECRET })}
           </p>
         </div>
       ) : null}

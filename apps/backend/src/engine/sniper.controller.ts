@@ -1,5 +1,6 @@
 import { Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { t } from '@saf-shekan/i18n';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { redactBotConfig } from '../bot-config/redact.js';
 import { BotConfigService } from '../bot-config/bot-config.service.js';
@@ -17,8 +18,8 @@ export class SniperController {
   ) {}
 
   @Get('health')
-  @ApiOperation({ summary: 'بررسی سلامت سرویس (Health Check)' })
-  @ApiResponse({ status: 200, description: 'سرویس آماده به کار است' })
+  @ApiOperation({ summary: t('swagger', 'health') })
+  @ApiResponse({ status: 200, description: t('swagger', 'healthOk') })
   getHealth() {
     return {
       status: 'ok',
@@ -28,8 +29,8 @@ export class SniperController {
   }
 
   @Get('status')
-  @ApiOperation({ summary: 'دریافت وضعیت جاری ربات، موتور سرخطی، انحراف زمان و قالب‌ها' })
-  @ApiResponse({ status: 200, description: 'وضعیت سیستم بدون راز کارگزاری' })
+  @ApiOperation({ summary: t('swagger', 'status') })
+  @ApiResponse({ status: 200, description: t('swagger', 'statusOk') })
   getStatus() {
     return {
       config: redactBotConfig(this.configService.getConfig()),
@@ -41,8 +42,8 @@ export class SniperController {
   }
 
   @Get('reports')
-  @ApiOperation({ summary: 'دریافت تاریخچه و شلیک‌های زنده موتور سرخطی' })
-  @ApiResponse({ status: 200, description: 'نتایج شلیک‌ها و وضعیت' })
+  @ApiOperation({ summary: t('swagger', 'history') })
+  @ApiResponse({ status: 200, description: t('swagger', 'historyOk') })
   getReports() {
     return {
       success: true,
@@ -54,8 +55,8 @@ export class SniperController {
 
   @Post('sniper/arm')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'مسلح‌سازی ربات برای شلیک در زمان هدف (Arm)' })
-  @ApiResponse({ status: 200, description: 'نتیجه آماده‌باش ربات' })
+  @ApiOperation({ summary: t('swagger', 'arm') })
+  @ApiResponse({ status: 200, description: t('swagger', 'armOk') })
   armSniper() {
     return this.sniperService.arm();
   }
@@ -63,8 +64,8 @@ export class SniperController {
   @Post('sniper/disarm')
   @HttpCode(HttpStatus.OK)
   @SkipThrottle()
-  @ApiOperation({ summary: 'لغو آماده‌باش و خروج از حالت مسلح (Disarm)' })
-  @ApiResponse({ status: 200, description: 'لغو موفقیت‌آمیز' })
+  @ApiOperation({ summary: t('swagger', 'disarm') })
+  @ApiResponse({ status: 200, description: t('swagger', 'disarmOk') })
   disarmSniper() {
     return this.sniperService.disarm();
   }
@@ -72,8 +73,8 @@ export class SniperController {
   @Post('sniper/test-shot')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 12, ttl: 60000 } })
-  @ApiOperation({ summary: 'شلیک آزمایشی فوری جهت بررسی هدرها و پینگ بدون فعال‌سازی ساعت' })
-  @ApiResponse({ status: 200, description: 'نتیجه شلیک تستی' })
+  @ApiOperation({ summary: t('swagger', 'testShot') })
+  @ApiResponse({ status: 200, description: t('swagger', 'testShotOk') })
   async testShot() {
     const result = await this.sniperService.testManualShoot();
     return {

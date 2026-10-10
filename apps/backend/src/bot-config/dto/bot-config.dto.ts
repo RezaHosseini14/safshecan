@@ -1,17 +1,18 @@
+import { t } from '@saf-shekan/i18n';
 import { IsString, IsNumber, IsBoolean, IsOptional, IsArray, ValidateNested, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class OrderConfigDto {
-  @ApiProperty({ example: 'فزر', description: 'نماد سهام' })
+  @ApiProperty({ example: t('swagger', 'exampleSymbol'), description: t('swagger', 'symbol') })
   @IsString()
   symbol!: string;
 
-  @ApiProperty({ example: 25000, description: 'قیمت بر حسب ریال' })
+  @ApiProperty({ example: 25000, description: t('swagger', 'priceRial') })
   @IsNumber()
   price!: number;
 
-  @ApiProperty({ example: 500, description: 'حجم سفارش' })
+  @ApiProperty({ example: 500, description: t('swagger', 'quantity') })
   @IsNumber()
   quantity!: number;
 
@@ -19,7 +20,7 @@ export class OrderConfigDto {
   @IsIn(['BUY', 'SELL'])
   side!: 'BUY' | 'SELL';
 
-  @ApiProperty({ example: 'custom', description: 'نوع کارگزاری' })
+  @ApiProperty({ example: 'custom', description: t('swagger', 'brokerType') })
   @IsString()
   brokerType!: string;
 
@@ -43,11 +44,11 @@ export class NetworkConfigDto {
   @IsIn(['POST', 'GET', 'PUT'])
   method!: 'POST' | 'GET' | 'PUT';
 
-  @ApiProperty({ example: {}, description: 'هدرهای HTTP' })
+  @ApiProperty({ example: {}, description: t('swagger', 'headers') })
   @IsOptional()
   headers: Record<string, string> = {};
 
-  @ApiProperty({ example: '{}', description: 'الگوی بدنه درخواست' })
+  @ApiProperty({ example: '{}', description: t('swagger', 'bodyTemplate') })
   @IsString()
   bodyTemplate!: string;
 
@@ -68,23 +69,23 @@ export class NetworkConfigDto {
 }
 
 export class TimingConfigDto {
-  @ApiProperty({ example: '08:45:00.000', description: 'ساعت هدف شلیک' })
+  @ApiProperty({ example: '08:45:00.000', description: t('swagger', 'targetTime') })
   @IsString()
   targetTime!: string;
 
-  @ApiProperty({ example: 18, description: 'جبران پینگ بر حسب میلی‌ثانیه' })
+  @ApiProperty({ example: 18, description: t('swagger', 'leadMs') })
   @IsNumber()
   leadTimeMs!: number;
 
-  @ApiProperty({ example: 5, description: 'تعداد شلیک‌های رگباری' })
+  @ApiProperty({ example: 5, description: t('swagger', 'burstCount') })
   @IsNumber()
   burstCount!: number;
 
-  @ApiProperty({ example: 2.5, description: 'فاصله شلیک‌ها بر حسب میلی‌ثانیه' })
+  @ApiProperty({ example: 2.5, description: t('swagger', 'burstGap') })
   @IsNumber()
   burstIntervalMs!: number;
 
-  @ApiPropertyOptional({ example: 12, description: 'ثانیه شروع پیش‌گرمایش' })
+  @ApiPropertyOptional({ example: 12, description: t('swagger', 'prewarm') })
   @IsOptional()
   @IsNumber()
   preWarmSeconds?: number;
@@ -106,7 +107,7 @@ export class TimingConfigDto {
 }
 
 export class AccountInfoDto {
-  @ApiPropertyOptional({ example: 'کاربر آنلاین بورس' })
+  @ApiPropertyOptional({ example: t('swagger', 'exampleUser') })
   @IsOptional()
   @IsString()
   customerTitle?: string;
@@ -116,7 +117,7 @@ export class AccountInfoDto {
   @IsString()
   customerCode?: string;
 
-  @ApiPropertyOptional({ example: 'تدبیرپرداز' })
+  @ApiPropertyOptional({ example: t('swagger', 'exampleBroker') })
   @IsOptional()
   @IsString()
   brokerName?: string;

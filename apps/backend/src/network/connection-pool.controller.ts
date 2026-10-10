@@ -1,5 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { t } from '@saf-shekan/i18n';
 import { ConnectionPoolService } from './connection-pool.service.js';
 import { BotConfigService } from '../bot-config/bot-config.service.js';
 import { PingDto, TestConnectionDto } from './dto/connection.dto.js';
@@ -14,8 +15,8 @@ export class ConnectionPoolController {
 
   @Post('broker/test-connection')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'تست اتصال زنده و پیش‌گرمایش SSL با سرور کارگزاری' })
-  @ApiResponse({ status: 200, description: 'نتیجه تست و پینگ رفت و برگشت' })
+  @ApiOperation({ summary: t('swagger', 'connectionTest') })
+  @ApiResponse({ status: 200, description: t('swagger', 'connectionTestOk') })
   async testConnection(@Body() body: TestConnectionDto) {
     const cfg = this.configService.getConfig();
     const url = body.url || cfg.network.targetUrl;
@@ -28,15 +29,15 @@ export class ConnectionPoolController {
       url,
       message:
         rttMs >= 0
-          ? `اتصال برقرار شد (${rttMs}ms)`
-          : 'خطا در برقراری اتصال با سرور کارگزاری',
+          ? t('errors', 'connected', { rtt: rttMs })
+          : t('errors', 'connectFailed'),
     };
   }
 
   @Post('network/ping')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'سنجش پینگ و تاخیر شبکه تا کارگزاری' })
-  @ApiResponse({ status: 200, description: 'مقدار پینگ بر حسب میلی‌ثانیه' })
+  @ApiOperation({ summary: t('swagger', 'ping') })
+  @ApiResponse({ status: 200, description: t('swagger', 'pingOk') })
   async pingBroker(@Body() body: PingDto) {
     const cfg = this.configService.getConfig();
     const url = body.url || cfg.network.targetUrl;

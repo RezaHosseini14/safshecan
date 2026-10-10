@@ -1,4 +1,5 @@
 import type { BotConfig, OrderShotResult, SniperState } from '@saf-shekan/core';
+import { t } from '@saf-shekan/i18n';
 import { formatExactTime } from '../../shared/time/format-time.js';
 import { analyzeBrokerResponse } from './broker-response.js';
 import { fillOrderTemplate } from './fill-order-template.js';
@@ -24,12 +25,12 @@ export class SniperEngine {
 
   public arm(): { success: boolean; message: string; targetDate?: Date } {
     if (this.state === 'ARMED' || this.state === 'FIRING') {
-      return { success: false, message: 'موتور سرخطی در حال حاضر در حالت فعال است.' };
+      return { success: false, message: t('engine', 'alreadyActive') };
     }
 
     const config = this.ports.readConfig();
     if (!config.network.targetUrl) {
-      return { success: false, message: 'آدرس اینترنتی کارگزاری تنظیم نشده است.' };
+      return { success: false, message: t('engine', 'urlMissing') };
     }
 
     const targetDate = this.calculateTargetDate(config.timing.targetTime);
@@ -39,7 +40,7 @@ export class SniperEngine {
     if (diffMs <= 0) {
       return {
         success: false,
-        message: `ساعت هدف (${config.timing.targetTime}) گذشته است. لطفاً زمان را برای آینده تنظیم کنید.`,
+        message: t('engine', 'targetPassed', { time: config.timing.targetTime }),
       };
     }
 
@@ -64,7 +65,10 @@ export class SniperEngine {
       this.spinWaitAndFire(triggerTimestamp);
     }, coarseWaitMs);
 
-    const message = `موتور سرخطی فعال شد. زمان شلیک: ${formatExactTime(targetDate, true)} (فاصله: ${Math.round(diffMs / 1000)} ثانیه)`;
+    const message = t('engine', 'armed', {
+      time: formatExactTime(targetDate, true),
+      seconds: Math.round(diffMs / 1000),
+    });
     return { success: true, message, targetDate };
   }
 
@@ -84,7 +88,7 @@ export class SniperEngine {
       if (this.state === 'CANCELLED') this.setState('IDLE');
     }, 1500);
 
-    return { success: true, message: 'موتور سرخطی با موفقیت غیرفعال شد.' };
+    return { success: true, message: t('engine', 'disarmed') };
   }
 
   public async testManualShoot(): Promise<OrderShotResult> {
@@ -96,7 +100,7 @@ export class SniperEngine {
       type: 'SHOT_LOG',
       data: {
         level: shot.success ? 'success' : 'warn',
-        text: this.shotText('شلیک آزمایشی', shot),
+        text: this.shotText(t('engine', 'testShot'), shot),
         shot,
       },
     });
@@ -110,7 +114,7 @@ export class SniperEngine {
   private startPreWarming(): void {
     this.setState('PRE_WARMING');
     const config = this.ports.readConfig();
-    this.broadcastLog('info', '🔥 آغاز پیش‌گرمایش سوکت و هندشیک SSL با کارگزاری...');
+    this.broadcastLog('info', t('engine', 'prewarm'));
     void this.ports.transport.preWarm(config.network.targetUrl, config.network.headers);
 
     this.preWarmInterval = setInterval(() => {
@@ -146,7 +150,10 @@ export class SniperEngine {
     const config = this.ports.readConfig();
     this.broadcastLog(
       'warn',
-      `🚀 شلیک رگباری آغاز شد! تعداد: ${config.timing.burstCount} | فاصله: ${config.timing.burstIntervalMs}ms`
+      t('engine', 'burstStart', {
+        count: config.timing.burstCount,
+        interval: config.timing.burstIntervalMs,
+      })
     );
 
     const payload = this.preparePayload(config);
@@ -173,7 +180,7 @@ export class SniperEngine {
           type: 'SHOT_LOG',
           data: {
             level: result.success ? 'success' : 'warn',
-            text: this.shotText(`شلیک ${result.shotIndex}`, result),
+            text: this.shotText(t('engine', 'shotLabel', { index: result.shotIndex }), result),
             shot: result,
           },
         });
@@ -185,9 +192,11 @@ export class SniperEngine {
           }
           this.broadcastLog(
             'success',
-            `🎯 شلیک شماره ${result.shotIndex} موفق شد! کد رهگیری: ${result.trackingCode || 'دریافت شد'} ${
-              stopOnFirstSuccess || config.order.antiDoubleSpend ? '- مدارشکن فعال شد.' : ''
-            }`
+            t('engine', 'shotHit', {
+              index: result.shotIndex,
+              code: result.trackingCode || t('engine', 'received'),
+              suffix: stopOnFirstSuccess || config.order.antiDoubleSpend ? t('engine', 'breaker') : '',
+            })
           );
         }
       });
@@ -199,7 +208,7 @@ export class SniperEngine {
 
     setTimeout(() => {
       this.setState('COMPLETED');
-      this.broadcastLog('info', '🏁 عملیات سرخطی پایان یافت.');
+      this.broadcastLog('info', t('engine', 'done'));
       this.ports.broadcaster.broadcast({
         type: 'SNIPER_SUMMARY',
         data: { results: this.shotResults },
@@ -240,7 +249,7 @@ export class SniperEngine {
         ...this.orderSnapshot(config),
       };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'خطای شبکه در ارسال درخواست';
+      const message = err instanceof Error ? err.message : t('errors', 'networkShot');
       return {
         shotIndex: index,
         timestamp: sendTimestampStr,
@@ -309,8 +318,16 @@ export class SniperEngine {
 
   private shotText(label: string, shot: OrderShotResult): string {
     const detail =
-      shot.errorMessage || (shot.trackingCode ? `کد رهگیری: ${shot.trackingCode}` : 'پاسخ دریافت شد');
-    return `[${label}] کد ${shot.httpStatus} | تاخیر: ${shot.latencyMs}ms | ${detail}`;
+      shot.errorMessage ||
+      (shot.trackingCode
+        ? t('errors', 'tracking', { code: shot.trackingCode })
+        : t('errors', 'responseReceived'));
+    return t('engine', 'shotLine', {
+      label,
+      status: shot.httpStatus,
+      latency: shot.latencyMs,
+      detail,
+    });
   }
 
   private delay(ms: number): Promise<void> {

@@ -1,11 +1,14 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Copy, Terminal, Trash2 } from 'lucide-react';
 import type { LogEntry } from '@saf-shekan/core';
 import { Button } from '@/components/ui/button';
 import { sanitizeText } from '@/lib/security';
 
 export function LiveTerminal({ logs, onClear }: { logs: LogEntry[]; onClear: () => void }) {
+  const t = useTranslations('console');
+  const tc = useTranslations('common');
   const lines = logs.map((log) => sanitizeText(`${log.time} ${log.text}`));
 
   return (
@@ -16,8 +19,8 @@ export function LiveTerminal({ logs, onClear }: { logs: LogEntry[]; onClear: () 
             <Terminal className="h-5 w-5" />
           </span>
           <div>
-            <h3 className="text-sm font-bold">ترمینال زنده وقایع و شلیک‌ها</h3>
-            <p className="text-[11px] text-slate-400">گزارش لحظه‌ای بسته‌های ارسالی به هسته معاملات</p>
+            <h3 className="text-sm font-bold">{t('terminalTitle')}</h3>
+            <p className="text-[11px] text-slate-400">{t('terminalHint')}</p>
           </div>
         </div>
         <div className="flex gap-1.5">
@@ -30,18 +33,18 @@ export function LiveTerminal({ logs, onClear }: { logs: LogEntry[]; onClear: () 
             }}
           >
             <Copy className="h-3.5 w-3.5" />
-            کپی
+            {tc('copy')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={onClear}>
             <Trash2 className="h-3.5 w-3.5" />
-            پاک‌سازی
+            {tc('clear')}
           </Button>
         </div>
       </div>
       <div className="min-h-[90px] rounded-lg border border-white/6 bg-[#070b14] p-4 font-mono text-xs text-slate-300" dir="ltr">
         {lines.length === 0 ? (
           <p className="text-center text-slate-400" dir="rtl">
-            در انتظار رویداد جدید... با مسلح‌سازی ربات، وقایع شلیک در این قسمت نمایش داده می‌شوند
+            {t('terminalEmpty')}
           </p>
         ) : (
           lines.map((line, index) => (

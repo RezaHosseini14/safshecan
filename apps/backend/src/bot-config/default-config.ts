@@ -1,8 +1,9 @@
 import type { BotConfig } from '@saf-shekan/core';
+import { t } from '@saf-shekan/i18n';
 
 export const DEFAULT_CONFIG: BotConfig = {
   order: {
-    symbol: 'عرضه_اولیه',
+    symbol: t('common', 'defaultSymbol'),
     price: 10000,
     quantity: 100,
     side: 'BUY',

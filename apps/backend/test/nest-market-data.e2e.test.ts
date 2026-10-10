@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import { createNestApp } from '../src/bootstrap.js';
 
 describe('NestJS Market Data E2E', () => {
@@ -57,6 +58,17 @@ describe('NestJS Market Data E2E', () => {
       .expect(200);
 
     expect(unwatch.body.watchlist).not.toContain(symbol);
+  });
+
+  it('GET /api/market/dossier without symbol returns an empty dossier', async () => {
+    const res = await request(app.getHttpServer()).get('/api/market/dossier').expect(200);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.trades).toEqual([]);
+    expect(res.body.hasBlock).toBe(false);
+    expect(res.body.indicators.rsi14).toBeNull();
+    expect(res.body.narrative.summary).toBe(t('dossier', 'noServerData'));
+    expect(res.body.narrative.risk).toBe('unknown');
   });
 
   it('GET /api/market/quote?symbol=فزر returns quote-shaped real/degraded payload', async () => {

@@ -1,0 +1,16 @@
+{
+  "invalid": "{field} نامعتبر است",
+  "isString": "{field} باید متن باشد",
+  "isNumber": "{field} باید عدد باشد",
+  "isInt": "{field} باید عدد صحیح باشد",
+  "isBoolean": "{field} باید بولی باشد",
+  "isEnum": "{field} مجاز نیست",
+  "min": "{field} از حد مجاز کمتر است",
+  "max": "{field} از حد مجاز بیشتر است",
+  "isNotEmpty": "{field} نباید خالی باشد",
+  "isUrl": "{field} باید آدرس معتبر باشد",
+  "isObject": "{field} باید شیء باشد",
+  "isArray": "{field} باید فهرست باشد",
+  "whitelistValidation": "{field} مجاز نیست",
+  "nestedValidation": "{field} نامعتبر است"
+}

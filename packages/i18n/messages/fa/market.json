@@ -1,0 +1,13 @@
+{
+  "pickerLabel": "نماد",
+  "pickerSearch": "جستجوی نماد، نام یا ISIN",
+  "pickerSearchLong": "جستجوی نماد، نام شرکت یا صنعت (فزر، اهرم، شپنا)...",
+  "pickerEmptyValue": "نماد را انتخاب کنید",
+  "pickerLoading": "در حال بارگذاری نمادها…",
+  "pickerFailed": "فهرست نمادها از سرور نرسید",
+  "pickerNone": "نمادی پیدا نشد",
+  "pickerCeiling": "سقف",
+  "pickerFloor": "کف",
+  "pickerVolume": "حجم",
+  "pickerBase": "حجم مبنا"
+}

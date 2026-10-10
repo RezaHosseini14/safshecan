@@ -1,7 +1,9 @@
 import type { TimeSyncStatus } from '@saf-shekan/core';
 
+export const MANUAL_TIME_SOURCE = 'manual';
+
 export function isManualTimeSource(source: string): boolean {
-  return source.includes('دستی');
+  return source === MANUAL_TIME_SOURCE;
 }
 
 export function shouldRunScheduledSync(input: { inFlight: boolean; source: string }): boolean {

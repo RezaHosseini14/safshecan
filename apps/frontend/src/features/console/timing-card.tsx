@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Info, Save, SlidersHorizontal } from 'lucide-react';
 import type { BotConfig } from '@saf-shekan/core';
 import { Button } from '@/components/ui/button';
@@ -19,12 +20,13 @@ export function TimingCard({
   const draft = override ?? timing;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const t = useTranslations('console');
 
   const fields = [
-    { key: 'targetTime' as const, label: 'زمان هدف بازگشایی', value: draft.targetTime },
-    { key: 'leadTimeMs' as const, label: 'لیدتایم تاخیر شبکه (ms)', value: String(draft.leadTimeMs) },
-    { key: 'burstCount' as const, label: 'تعداد شلیک رگباری (Burst)', value: String(draft.burstCount) },
-    { key: 'burstIntervalMs' as const, label: 'فاصله بین شلیک‌ها (ms)', value: String(draft.burstIntervalMs) },
+    { key: 'targetTime' as const, label: t('timing.targetTime'), value: draft.targetTime },
+    { key: 'leadTimeMs' as const, label: t('timing.leadTimeMs'), value: String(draft.leadTimeMs) },
+    { key: 'burstCount' as const, label: t('timing.burstCount'), value: String(draft.burstCount) },
+    { key: 'burstIntervalMs' as const, label: t('timing.burstIntervalMs'), value: String(draft.burstIntervalMs) },
   ];
 
   return (
@@ -35,8 +37,8 @@ export function TimingCard({
             <SlidersHorizontal className="h-5 w-5" />
           </span>
           <div>
-            <h3 className="text-sm font-bold">تنظیمات موتور شلیک و تایمینگ</h3>
-            <p className="text-[11px] text-slate-400">تنظیم پارامترهای میلی‌ثانیه‌ای و تعداد شلیک‌ها</p>
+            <h3 className="text-sm font-bold">{t('timingTitle')}</h3>
+            <p className="text-[11px] text-slate-400">{t('timingHint')}</p>
           </div>
         </div>
         <Button
@@ -52,7 +54,7 @@ export function TimingCard({
             };
             const parsed = TimingConfigSchema.safeParse(next);
             if (!parsed.success) {
-              setError('بازهٔ زمان یا شلیک نامعتبر است');
+              setError(t('timingInvalid'));
               return;
             }
             setError(null);
@@ -61,7 +63,7 @@ export function TimingCard({
           }}
         >
           <Save className="h-3.5 w-3.5" />
-          ذخیره تنظیمات
+          {t('saveTiming')}
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -87,11 +89,11 @@ export function TimingCard({
       <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-white/6 bg-white/3 p-3 text-[11px] text-slate-400">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
         <p>
-          <span className="font-bold text-slate-200">فرمول شلیک:</span> سفارش اول در لحظه{' '}
+          <span className="font-bold text-slate-200">{t('formulaLabel')}</span> {t('formulaBefore')}{' '}
           <span className="text-cyan-400" dir="ltr">
             (TargetTime - LeadTime)
           </span>{' '}
-          ارسال شده و شلیک‌های بعدی با فاصله مشخص‌شده تکرار می‌شوند.
+          {t('formulaAfter')}
         </p>
       </div>
     </article>

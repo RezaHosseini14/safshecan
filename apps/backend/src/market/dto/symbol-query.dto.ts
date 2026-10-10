@@ -1,28 +1,37 @@
 import { IsString, IsOptional, IsIn } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { t } from '@saf-shekan/i18n';
 import { Type } from 'class-transformer';
 
 export class SymbolQueryDto {
-  @ApiPropertyOptional({ example: 'فزر', description: 'جستجو در نماد، نام شرکت یا صنعت' })
+  @ApiPropertyOptional({ example: t('swagger', 'exampleSymbol'), description: t('swagger', 'symbolQuery') })
   @IsOptional()
   @IsString()
   q?: string;
 
-  @ApiPropertyOptional({ example: 'true', description: 'فیلتر فقط عرضه‌های اولیه' })
+  @ApiPropertyOptional({ example: 'true', description: t('swagger', 'ipoOnly') })
   @IsOptional()
   @IsIn(['true', 'false', '1', '0'])
   onlyIpo?: string;
 
-  @ApiPropertyOptional({ example: 'بورس', description: 'فیلتر بازار (بورس، فرابورس، پایه)' })
+  @ApiPropertyOptional({ example: t('swagger', 'exampleMarket'), description: t('swagger', 'marketFilter') })
   @IsOptional()
   @IsString()
   market?: string;
 
   @ApiPropertyOptional({
     example: 150,
-    description: 'حداکثر تعداد نتایج (پیش‌فرض ۱۵۰، سقف ۱۰۰۰۰)',
+    description: t('swagger', 'limit'),
   })
   @IsOptional()
   @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional({
+    example: '1',
+    description: t('swagger', 'fields'),
+  })
+  @IsOptional()
+  @IsIn(['true', 'false', '1', '0'])
+  brief?: string;
 }

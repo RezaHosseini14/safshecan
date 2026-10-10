@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +39,7 @@ export class BotConfigService {
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`عدم موفقیت در خواندن config.json، استفاده از پیش‌فرض: ${message}`);
+      this.logger.warn(t('logs', 'configReadFail', { detail: message }));
     }
     return structuredClone(DEFAULT_CONFIG);
   }
@@ -55,10 +56,10 @@ export class BotConfigService {
 
     try {
       fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(this.config, null, 2), 'utf-8');
-      this.logger.log('تنظیمات در config.json ذخیره شد.');
+      this.logger.log(t('logs', 'configSaved'));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`خطا در ذخیره‌سازی config.json: ${message}`);
+      this.logger.error(t('logs', 'configWriteFail', { detail: message }));
     }
 
     return this.getConfig();
@@ -67,7 +68,7 @@ export class BotConfigService {
   public applyPreset(presetId: string): BotConfig {
     const preset = findBrokerPreset(presetId);
     if (!preset) {
-      throw new Error(`قالب کارگزاری با شناسه '${presetId}' یافت نشد.`);
+      throw new Error(t('errors', 'presetMissing', { id: presetId }));
     }
 
     this.config.order.brokerType = preset.id as BotConfig['order']['brokerType'];
@@ -76,7 +77,7 @@ export class BotConfigService {
     this.config.network.bodyTemplate = preset.defaultBody;
 
     this.saveConfig(this.config);
-    this.logger.log(`قالب کارگزاری «${preset.name}» اعمال شد → ${preset.sampleUrl}`);
+    this.logger.log(t('logs', 'presetApplied', { name: preset.name, url: preset.sampleUrl }));
     return this.getConfig();
   }
 }

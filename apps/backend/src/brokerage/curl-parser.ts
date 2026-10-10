@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { t } from '@saf-shekan/i18n';
 import { NetworkConfig, AccountInfo, OrderConfig } from '@saf-shekan/core';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,7 +69,7 @@ export class CurlParser {
    */
   public static parse(curlCommand: string): NetworkConfig {
     if (!curlCommand || typeof curlCommand !== 'string') {
-      throw new Error('دستور cURL خالی است.');
+      throw new Error(t('errors', 'curlEmpty'));
     }
 
     const cleanCommand = curlCommand.replace(/\\\r?\n/g, ' ').trim();
@@ -79,26 +80,28 @@ export class CurlParser {
     let cookies = '';
 
     // ۱. استخراج URL
-    const urlMatches = cleanCommand.match(/curl\s+(?:'([^']+)'|"([^"]+)"|(\S+))/i);
+    const urlMatches = cleanCommand.match(/curl\s+(?:\x27([^\x27]+)\x27|\x22([^\x22]+)\x22|(\S+))/i);
     if (urlMatches) {
       url = urlMatches[1] || urlMatches[2] || urlMatches[3] || '';
     }
 
     if (!url || url.startsWith('-')) {
-      const explicitUrlMatch = cleanCommand.match(/(?:--url\s+['"]?([^'"\s]+)['"]?)|(?:https?:\/\/[^\s'"]+)/i);
+      const explicitUrlMatch = cleanCommand.match(
+        /(?:--url\s+[\x27\x22]?([^\x27\x22\s]+)[\x27\x22]?)|(?:https?:\/\/[^\s\x27\x22]+)/i
+      );
       if (explicitUrlMatch) {
         url = explicitUrlMatch[1] || explicitUrlMatch[0];
       }
     }
 
     // ۲. استخراج Method
-    const methodMatch = cleanCommand.match(/(?:-X|--request)\s+['"]?([A-Z]+)['"]?/i);
+    const methodMatch = cleanCommand.match(/(?:-X|--request)\s+[\x27\x22]?([A-Z]+)[\x27\x22]?/i);
     if (methodMatch) {
       method = methodMatch[1].toUpperCase() as any;
     }
 
     // ۳. استخراج Headers
-    const headerRegex = /(?:-H|--header)\s+(?:'([^']+)'|"([^"]+)")/gi;
+    const headerRegex = /(?:-H|--header)\s+(?:\x27([^\x27]+)\x27|\x22([^\x22]+)\x22)/gi;
     let match: RegExpExecArray | null;
     while ((match = headerRegex.exec(cleanCommand)) !== null) {
       const rawHeader = match[1] || match[2] || '';
@@ -116,13 +119,13 @@ export class CurlParser {
     }
 
     // ۴. استخراج Cookies از فلگ -b یا --cookie
-    const cookieFlagMatch = cleanCommand.match(/(?:-b|--cookie)\s+(?:'([^']+)'|"([^"]+)")/i);
+    const cookieFlagMatch = cleanCommand.match(/(?:-b|--cookie)\s+(?:\x27([^\x27]+)\x27|\x22([^\x22]+)\x22)/i);
     if (cookieFlagMatch) {
       cookies = cookieFlagMatch[1] || cookieFlagMatch[2] || '';
     }
 
     // ۵. استخراج Data / Body
-    const dataRegex = /(?:-d|--data|--data-raw|--data-binary)\s+(?:'([\s\S]*?)'|"([\s\S]*?)")/i;
+    const dataRegex = /(?:-d|--data|--data-raw|--data-binary)\s+(?:\x27([\s\S]*?)\x27|\x22([\s\S]*?)\x22)/i;
     const dataMatch = cleanCommand.match(dataRegex);
     if (dataMatch) {
       body = dataMatch[1] || dataMatch[2] || '';
@@ -132,7 +135,7 @@ export class CurlParser {
     }
 
     if (!url) {
-      throw new Error('آدرس اینترنتی (URL) در دستور cURL یافت نشد.');
+      throw new Error(t('errors', 'curlNoUrl'));
     }
 
     return {
@@ -151,22 +154,22 @@ export class CurlParser {
     const lowerUrl = url.toLowerCase();
 
     if (lowerUrl.includes('tadbirpardaz') || lowerUrl.includes('onlineplus')) {
-      return { id: 'tadbir', name: 'سامانه تدبیر پرداز (Online Plus)' };
+      return { id: 'tadbir', name: t('brokers', 'detected.tadbir') };
     }
     if (lowerUrl.includes('emofid') || lowerUrl.includes('easytrader')) {
-      return { id: 'mofid', name: 'ایزی‌تریدر کارگزاری مفید' };
+      return { id: 'mofid', name: t('brokers', 'detected.mofid') };
     }
     if (lowerUrl.includes('agah') || lowerUrl.includes('asa.') || lowerUrl.includes('rayan')) {
-      return { id: 'agah', name: 'سامانه آگاه / آسا' };
+      return { id: 'agah', name: t('brokers', 'detected.agah') };
     }
     if (lowerUrl.includes('farabi') || lowerUrl.includes('farabixo')) {
-      return { id: 'farabixo', name: 'فارابیکسو کارگزاری فارابی' };
+      return { id: 'farabixo', name: t('brokers', 'detected.farabixo') };
     }
     if (lowerUrl.includes('sahra') || lowerUrl.includes('dotin') || lowerUrl.includes('customerorder')) {
-      return { id: 'sahra', name: 'سامانه صحرا / داتکس' };
+      return { id: 'sahra', name: t('brokers', 'detected.sahra') };
     }
 
-    return { id: 'custom', name: 'کارگزاری شناسایی شده (cURL اختصاصی)' };
+    return { id: 'custom', name: t('brokers', 'detected.custom') };
   }
 
   /**
@@ -184,8 +187,8 @@ export class CurlParser {
       const jwtInfo = this.decodeJwtPayload(token);
       if (jwtInfo) {
         return {
-          customerTitle: jwtInfo.title || 'کاربر احراز هویت شده',
-          customerCode: jwtInfo.code || 'کد کاربری تایید شده',
+          customerTitle: jwtInfo.title || t('brokers', 'account.jwtTitle'),
+          customerCode: jwtInfo.code || t('brokers', 'account.jwtCode'),
           brokerName,
           tokenExpiresAt: jwtInfo.expiresAt,
           minutesLeft: jwtInfo.minutesLeft,
@@ -203,8 +206,8 @@ export class CurlParser {
         const title = json.CustomerTitle || json.CustomerName;
         if (code || title) {
           return {
-            customerTitle: title || 'کاربر متصل',
-            customerCode: String(code || 'شناسه کاربری'),
+            customerTitle: title || t('brokers', 'account.connectedTitle'),
+            customerCode: String(code || t('brokers', 'account.connectedCode')),
             brokerName,
             authType: headers['Cookie'] || headers['cookie'] ? 'SESSION_COOKIE' : 'BASIC',
           };
@@ -214,8 +217,8 @@ export class CurlParser {
 
     const hasCookies = !!(headers['Cookie'] || headers['cookie']);
     return {
-      customerTitle: hasCookies ? 'نشست فعال (Session Cookie)' : 'در انتظار ورود cURL معتبر',
-      customerCode: hasCookies ? 'احراز هویت کوکی' : 'بدون نشست',
+      customerTitle: hasCookies ? t('brokers', 'account.sessionTitle') : t('brokers', 'account.waitingTitle'),
+      customerCode: hasCookies ? t('brokers', 'account.sessionCode') : t('brokers', 'account.waitingCode'),
       brokerName,
       authType: hasCookies ? 'SESSION_COOKIE' : 'NONE',
     };

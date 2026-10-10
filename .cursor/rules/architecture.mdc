@@ -8,5 +8,6 @@ alwaysApply: false
 - `apps/frontend` — Next.js UI only. Calls the backend; no broker HTTP from the browser
 - `apps/backend` — Nest modules: controller → service. Sniper, brokers, time-sync, connection pool stay in their modules
 - `packages/core` — shared types, fee math, queue estimate, trading-session constants
+- `packages/i18n` — Persian message catalog (`messages/fa`) and `t()`. UI and API copy do not live in feature files
 - `apps/cli` — terminal client of the same core. Do not fork fee or queue formulas
 - No circular imports. Named exports

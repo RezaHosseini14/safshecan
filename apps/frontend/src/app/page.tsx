@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { AppShell } from '@/features/shell/app-shell';
 import { ConsoleDesk } from '@/features/console/console-desk';
 import { api } from '@/lib/api';
 import { useSniperSocket } from '@/lib/use-sniper-socket';
 
 export default function DashboardPage() {
+  const t = useTranslations('shell');
   const socket = useSniperSocket();
   const { setEngineState, applyHttpTimeSync } = socket;
   const [disarming, setDisarming] = useState(false);
@@ -23,7 +25,7 @@ export default function DashboardPage() {
       engineState={socket.engineState}
       timeSync={socket.timeSync}
       connected={socket.connected}
-      footerNote="صف‌شکن (SafShekan) - ترمینال سرخطی‌زن فوق‌سریع بورس تهران"
+      footerNote={t('footerConsole')}
       onDisarm={() => {
         if (disarming) return;
         setDisarming(true);

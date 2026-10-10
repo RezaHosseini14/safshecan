@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { BotConfig, BrokerType, OrderConfig, TimingConfig } from '@saf-shekan/core';
 import { AtomicClocks } from '@/features/console/atomic-clocks';
 import { CommandPanel } from '@/features/console/command-panel';
@@ -40,6 +41,7 @@ const EMPTY_CONFIG: BotConfig = {
 };
 
 export function ConsoleDesk({ socket }: { socket: SocketState }) {
+  const t = useTranslations('console');
   const [config, setConfig] = useState<BotConfig>(EMPTY_CONFIG);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -59,13 +61,13 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
         if (res.state) setEngineState(res.state);
         if (res.timeSync) applyHttpTimeSync(res.timeSync);
       })
-      .catch(() => notify('وضعیت سرور خوانده نشد'));
-  }, [setEngineState, applyHttpTimeSync]);
+      .catch(() => notify(t('statusUnread')));
+  }, [setEngineState, applyHttpTimeSync, t]);
 
   const saveOrder = (patch: Partial<OrderConfig>) => {
     const updated = { ...config, order: { ...config.order, ...patch } };
     setConfig(updated);
-    api.saveConfig(updated).catch(() => notify('ذخیره سفارش ناموفق بود'));
+    api.saveConfig(updated).catch(() => notify(t('orderSaveFailed')));
   };
 
   const authHeader = Object.entries(config.network.headers || {}).find(([key]) => key.toLowerCase() === 'authorization');
@@ -84,9 +86,9 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
             .syncTime()
             .then((res) => {
               applyLiveTimeSync(res.status);
-              notify(`زمان با انحراف ${res.status.offsetMs}ms کالیبره شد`);
+              notify(t('timeCalibrated', { offset: res.status.offsetMs }));
             })
-            .catch((err: unknown) => notify(err instanceof Error ? err.message : 'خطا در همگام‌سازی'));
+            .catch((err: unknown) => notify(err instanceof Error ? err.message : t('syncFailed')));
         }}
         onNudgeOffset={(delta) => {
           const next = (socket.timeSync?.offsetMs ?? 0) + delta;
@@ -94,9 +96,9 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
             .setTimeOffset(next)
             .then((res) => {
               applyLiveTimeSync(res.status);
-              notify(`انحراف زمانی روی ${next}ms تنظیم شد`);
+              notify(t('offsetSet', { offset: next }));
             })
-            .catch((err: unknown) => notify(err instanceof Error ? err.message : 'خطا در آفست'));
+            .catch((err: unknown) => notify(err instanceof Error ? err.message : t('offsetFailed')));
         }}
       />
       <CommandPanel
@@ -108,24 +110,24 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
           setLoading(true);
           api
             .armSniper()
-            .then((res) => notify(res.message || 'موتور مسلح شد'))
-            .catch((err: unknown) => notify(err instanceof Error ? err.message : 'خطا در مسلح‌سازی'))
+            .then((res) => notify(res.message || t('armedFallback')))
+            .catch((err: unknown) => notify(err instanceof Error ? err.message : t('armFailed')))
             .finally(() => setLoading(false));
         }}
         onDisarm={() => {
           setLoading(true);
           api
             .disarmSniper()
-            .then((res) => notify(res.message || 'آماده‌باش لغو شد'))
-            .catch((err: unknown) => notify(err instanceof Error ? err.message : 'خطا در توقف'))
+            .then((res) => notify(res.message || t('disarmedFallback')))
+            .catch((err: unknown) => notify(err instanceof Error ? err.message : t('disarmFailed')))
             .finally(() => setLoading(false));
         }}
         onTestShot={() => {
           setLoading(true);
           api
             .fireTestShot()
-            .then((res) => notify(`شلیک آزمایشی انجام شد (${res.result.httpStatus})`))
-            .catch((err: unknown) => notify(err instanceof Error ? err.message : 'خطا در شلیک تستی'))
+            .then((res) => notify(t('testShotDone', { status: res.result.httpStatus })))
+            .catch((err: unknown) => notify(err instanceof Error ? err.message : t('testShotFailed')))
             .finally(() => setLoading(false));
         }}
       />
@@ -136,7 +138,7 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
           const res = await api.parseCurl(curl);
           if (res.config) {
             setConfig(res.config);
-            notify('دستور cURL اعمال شد. رازها در پاسخ سرور پوشانده شده‌اند.');
+            notify(t('curlApplied'));
           }
         }}
       />
@@ -149,9 +151,9 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
               .applyPreset(presetId as BrokerType)
               .then((res) => {
                 if (res.config) setConfig(res.config);
-                notify('قالب کارگزاری اعمال شد');
+                notify(t('presetApplied'));
               })
-              .catch((err: unknown) => notify(err instanceof Error ? err.message : 'اعمال قالب ناموفق بود'));
+              .catch((err: unknown) => notify(err instanceof Error ? err.message : t('presetFailed')));
           }}
         />
         <TimingCard
@@ -160,7 +162,7 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
             const updated = { ...config, timing };
             await api.saveConfig(updated);
             setConfig(updated);
-            notify('تنظیمات زمان‌بندی ذخیره شد');
+            notify(t('timingSaved'));
           }}
         />
       </section>

@@ -1,20 +1,31 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { t } from '@saf-shekan/i18n';
+import { Transform } from 'class-transformer';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class MarketQuoteQueryDto {
-  @ApiProperty({ description: 'نماد بورسی (مثلاً فزر)', example: 'فزر', required: false })
+  @ApiProperty({ description: t('swagger', 'quoteSymbol'), example: t('swagger', 'exampleSymbol'), required: false })
   @IsOptional()
   @IsString()
   symbol?: string;
 
-  @ApiPropertyOptional({ description: 'اجبار بروزرسانی بدون کش', example: 'false' })
+  @ApiPropertyOptional({ description: t('swagger', 'forceRefresh'), example: 'false' })
   @IsOptional()
   @IsString()
   force?: string;
 }
 
+export class MarketSpeechBodyDto {
+  @ApiProperty({ description: t('swagger', 'speechText'), maxLength: 2000 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  text!: string;
+}
+
 export class MarketWatchBodyDto {
-  @ApiProperty({ description: 'نماد بورسی برای پایش لحظه‌ای', example: 'فزر', required: false })
+  @ApiProperty({ description: t('swagger', 'watchSymbol'), example: t('swagger', 'exampleSymbol'), required: false })
   @IsOptional()
   @IsString()
   symbol?: string;

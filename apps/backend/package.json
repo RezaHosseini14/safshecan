@@ -23,6 +23,7 @@
     "@nestjs/throttler": "^6.7.1",
     "@nestjs/websockets": "^12.1.2",
     "@saf-shekan/core": "workspace:*",
+    "@saf-shekan/i18n": "workspace:*",
     "chalk": "^5.4.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",

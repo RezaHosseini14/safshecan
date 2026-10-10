@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Zap } from 'lucide-react';
 import type { SniperState, TimeSyncStatus } from '@saf-shekan/core';
 import { Num } from '@/components/num';
@@ -12,23 +13,23 @@ import { formatSignedMs, latencyClass } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const NAV = [
-  { href: '/', label: 'داشبورد', match: (path: string) => path === '/' },
+  { href: '/', labelKey: 'nav.dashboard', match: (path: string) => path === '/' },
   {
     href: '/watcher',
-    label: 'تحلیل و دیده‌بان TSETMC',
+    labelKey: 'nav.watcher',
     match: (path: string) => path.startsWith('/watcher'),
   },
-  { href: '/reports', label: 'گزارش‌ها', match: (path: string) => path.startsWith('/reports') },
+  { href: '/reports', labelKey: 'nav.reports', match: (path: string) => path.startsWith('/reports') },
 ] as const;
 
-const STATE_LABEL: Record<SniperState, string> = {
-  IDLE: 'آماده دریافت',
-  ARMED: 'آماده‌باش',
-  PRE_WARMING: 'پیش‌گرمایش',
-  FIRING: 'شلیک رگباری',
-  COMPLETED: 'پایان ماموریت',
-  CANCELLED: 'لغو شد',
-  ERROR: 'خطای شلیک',
+const STATE_KEY: Record<SniperState, 'state.IDLE' | 'state.ARMED' | 'state.PRE_WARMING' | 'state.FIRING' | 'state.COMPLETED' | 'state.CANCELLED' | 'state.ERROR'> = {
+  IDLE: 'state.IDLE',
+  ARMED: 'state.ARMED',
+  PRE_WARMING: 'state.PRE_WARMING',
+  FIRING: 'state.FIRING',
+  COMPLETED: 'state.COMPLETED',
+  CANCELLED: 'state.CANCELLED',
+  ERROR: 'state.ERROR',
 };
 
 export function AppShell({
@@ -38,7 +39,7 @@ export function AppShell({
   connected,
   onDisarm,
   footerNote,
-  footerAside = 'v2.0 Next.js Ultra HFT | High Precision hrtime & NTP Sync',
+  footerAside,
 }: {
   children: React.ReactNode;
   engineState: SniperState;
@@ -49,6 +50,9 @@ export function AppShell({
   footerAside?: string;
 }) {
   const pathname = usePathname() || '/';
+  const t = useTranslations('shell');
+  const tc = useTranslations('common');
+  const aside = footerAside ?? t('footerAside');
   const hot = isEngineHot(engineState);
   const sample = timeSync?.synchronized === true ? timeSync : null;
 
@@ -67,9 +71,9 @@ export function AppShell({
                   )}
                 />
               </span>
-              <span className="text-[17px] font-black tracking-tight">صف‌شکن</span>
+              <span className="text-[17px] font-black tracking-tight">{tc('brand')}</span>
               <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                HFT
+                {tc('hft')}
               </span>
             </Link>
             <nav className="hidden items-center gap-1 rounded-lg border border-white/6 bg-black/40 p-1 lg:flex">
@@ -87,7 +91,7 @@ export function AppShell({
                         : 'border border-transparent text-slate-400 hover:bg-white/5 hover:text-white'
                     )}
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </Link>
                 );
               })}
@@ -104,10 +108,10 @@ export function AppShell({
                       : 'font-bold text-emerald-400'
                 }
               >
-                {connected ? STATE_LABEL[engineState] : 'قطع اتصال'}
+                {connected ? t(STATE_KEY[engineState]) : t('disconnected')}
               </span>
               <span className="text-white/20">|</span>
-              <span className="text-slate-500">PING:</span>
+              <span className="text-slate-500">{t('ping')}</span>
               <span className={cn('font-bold', sample ? latencyClass(sample.rttMs) : 'text-slate-400')} dir="ltr">
                 {sample ? (
                   <>
@@ -118,7 +122,7 @@ export function AppShell({
                 )}
               </span>
               <span className="text-white/20">|</span>
-              <span className="text-slate-500">NTP Offset:</span>
+              <span className="text-slate-500">{t('ntpOffset')}</span>
               <span className={cn('font-bold', sample ? 'text-cyan-400' : 'text-slate-400')} dir="ltr">
                 {sample ? (
                   <>
@@ -132,7 +136,7 @@ export function AppShell({
             <HeaderActions />
             {hot ? (
               <Button type="button" variant="destructive" size="sm" onClick={onDisarm}>
-                توقف اضطراری
+                {t('emergencyStop')}
               </Button>
             ) : null}
           </div>
@@ -143,7 +147,7 @@ export function AppShell({
         <div className="mx-auto flex max-w-[1720px] flex-col items-center justify-between gap-2 sm:flex-row">
           <span>{footerNote}</span>
           <span className="num-mono" dir="ltr">
-            {footerAside}
+            {aside}
           </span>
         </div>
       </footer>

@@ -6,6 +6,7 @@ import {
   OnGatewayInit,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import { WebSocket, WebSocketServer as WsServer } from 'ws';
 import { ServerBroadcastMessage } from '@saf-shekan/core';
 
@@ -22,7 +23,7 @@ export class SniperGateway
   private onConnect: ((client: WebSocket) => void) | null = null;
 
   afterInit() {
-    this.logger.log('✓ درگاه وب‌سوکت صف‌شکن (SniperGateway) راه‌اندازی شد (/ws).');
+    this.logger.log(t('logs', 'gatewayReady'));
   }
 
   public setConnectionListener(listener: ((client: WebSocket) => void) | null): void {
@@ -35,12 +36,12 @@ export class SniperGateway
   }
 
   handleConnection(client: WebSocket) {
-    this.logger.log('یک اتصال کلاینت وب‌سوکت جدید برقرار شد.');
+    this.logger.log(t('logs', 'wsOpen'));
     this.onConnect?.(client);
   }
 
   handleDisconnect(client: WebSocket) {
-    this.logger.log('اتصال وب‌سوکت کلاینت قطع شد.');
+    this.logger.log(t('logs', 'wsClose'));
   }
 
   public broadcast(message: ServerBroadcastMessage): void {

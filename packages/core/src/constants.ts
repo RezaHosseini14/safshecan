@@ -1,6 +1,7 @@
 /**
  * Constants and market rules for Tehran Stock Exchange (TSE)
  */
+import { t } from '@saf-shekan/i18n';
 
 export const TSE_HOURS = {
   PRE_OPENING_START: '08:45:00.000',
@@ -42,8 +43,8 @@ export const TSE_FEE_RATES = {
 export const DEFAULT_BROKER_PRESETS = [
   {
     id: 'tadbir' as const,
-    name: 'تدبیرپرداز (سامانه اکسیر / پرانا)',
-    description: 'مورد استفاده کارگزاری‌های پاسارگاد، خوارزمی، بانک ملت، اقتصاد نوین و ده‌ها کارگزاری دیگر',
+    name: t('brokers', 'core.tadbir.name'),
+    description: t('brokers', 'core.tadbir.description'),
     defaultUrl: 'https://api.tadbirrlc.com/order/send',
     sampleHeaders: {
       'Content-Type': 'application/json;charset=UTF-8',
@@ -53,8 +54,8 @@ export const DEFAULT_BROKER_PRESETS = [
   },
   {
     id: 'mofid' as const,
-    name: 'مفید (ایزی‌تریدر / هلیوس)',
-    description: 'سامانه معاملات برخط کارگزاری آگاه/مفید با وب‌سوکت OMS هلیوس',
+    name: t('brokers', 'core.mofid.name'),
+    description: t('brokers', 'core.mofid.description'),
     defaultUrl: 'https://core.easytrader.emofid.com/api/v1/orders',
     sampleHeaders: {
       'Content-Type': 'application/json',
@@ -64,8 +65,8 @@ export const DEFAULT_BROKER_PRESETS = [
   },
   {
     id: 'agah' as const,
-    name: 'آگاه (سامانه آسا)',
-    description: 'سامانه برخط معاملات اختصاصی آگاه اکسپرس',
+    name: t('brokers', 'core.agah.name'),
+    description: t('brokers', 'core.agah.description'),
     defaultUrl: 'https://online.agah.com/api/order/place',
     sampleHeaders: {
       'Content-Type': 'application/json',
@@ -74,8 +75,8 @@ export const DEFAULT_BROKER_PRESETS = [
   },
   {
     id: 'farabixo' as const,
-    name: 'فارابی (سامانه فارابیکسو نکسو)',
-    description: 'سامانه معاملاتی هوشمند کارگزاری فارابی',
+    name: t('brokers', 'core.farabixo.name'),
+    description: t('brokers', 'core.farabixo.description'),
     defaultUrl: 'https://next.farabixo.com/api/v1/orders/send',
     sampleHeaders: {
       'Content-Type': 'application/json',
@@ -84,8 +85,8 @@ export const DEFAULT_BROKER_PRESETS = [
   },
   {
     id: 'sahra' as const,
-    name: 'صحرا (سامانه باران)',
-    description: 'مورد استفاده کارگزاری‌های مفیدقدیم، سینا، صباجهاد و بانک شهر',
+    name: t('brokers', 'core.sahra.name'),
+    description: t('brokers', 'core.sahra.description'),
     defaultUrl: 'https://online.sahra.ir/api/Order/SendOrder',
     sampleHeaders: {
       'Content-Type': 'application/json',
@@ -94,8 +95,8 @@ export const DEFAULT_BROKER_PRESETS = [
   },
   {
     id: 'custom' as const,
-    name: 'سفارشی (Custom cURL / OMS)',
-    description: 'هر نوع کارگزاری با کپی کردن cURL از تب Network مرورگر',
+    name: t('brokers', 'core.custom.name'),
+    description: t('brokers', 'core.custom.description'),
     defaultUrl: 'https://broker-domain.ir/api/order',
     sampleHeaders: {
       'Content-Type': 'application/json',

@@ -10,6 +10,8 @@ coverage/
 Thumbs.db
 .agents/
 apps/backend/config.json
+apps/backend/data/watchlist.json
 /config.json
 docker/certs/
 .cursor/mcp.json
+.codegraph/

@@ -1,5 +1,6 @@
 import { Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { t } from '@saf-shekan/i18n';
 import { SkipThrottle } from '@nestjs/throttler';
 import { SymbolsService, SymbolItem, SyncStatus } from './symbols.service.js';
 import { SymbolQueryDto } from './dto/symbol-query.dto.js';
@@ -12,13 +13,14 @@ export class SymbolsController {
 
   @Get('symbols')
   @HttpCode(200)
-  @ApiOperation({ summary: 'فهرست نمادها با جستجو/فیلتر (پیش‌فرض حداکثر ۱۵۰ مورد)' })
-  @ApiResponse({ status: 200, description: 'فهرست نمادها' })
+  @ApiOperation({ summary: t('swagger', 'symbolList') })
+  @ApiResponse({ status: 200, description: t('swagger', 'symbolListOk') })
   getSymbols(@Query() query: SymbolQueryDto): SymbolItem[] {
     try {
       const onlyIpo = query.onlyIpo === 'true' || query.onlyIpo === '1';
+      const brief = query.brief === 'true' || query.brief === '1';
       const limit = query.limit != null ? Number(query.limit) : 150;
-      return this.symbolsService.search(query.q, onlyIpo, query.market, limit);
+      return this.symbolsService.search(query.q, onlyIpo, query.market, limit, brief);
     } catch {
       return [];
     }
@@ -26,8 +28,8 @@ export class SymbolsController {
 
   @Get('symbols/ipos')
   @HttpCode(200)
-  @ApiOperation({ summary: 'فهرست ویژه عرضه‌های اولیه فعال، جاری و آتی بورس' })
-  @ApiResponse({ status: 200, description: 'فهرست عرضه‌های اولیه' })
+  @ApiOperation({ summary: t('swagger', 'ipoList') })
+  @ApiResponse({ status: 200, description: t('swagger', 'ipoListOk') })
   getIpos(): SymbolItem[] {
     try {
       return this.symbolsService.getIpos();
@@ -38,8 +40,8 @@ export class SymbolsController {
 
   @Get('symbols/status')
   @HttpCode(200)
-  @ApiOperation({ summary: 'وضعیت همگام‌سازی و آمار دیتابیس نمادها' })
-  @ApiResponse({ status: 200, description: 'وضعیت همگام‌سازی نمادها' })
+  @ApiOperation({ summary: t('swagger', 'symbolSyncStatus') })
+  @ApiResponse({ status: 200, description: t('swagger', 'symbolSyncStatusOk') })
   getStatus(): SyncStatus {
     try {
       return this.symbolsService.getStatus();
@@ -56,8 +58,8 @@ export class SymbolsController {
 
   @Post('symbols/refresh')
   @HttpCode(200)
-  @ApiOperation({ summary: 'همگام‌سازی و بروزرسانی آنی نمادها و عرضه‌های اولیه از بورس (TSETMC)' })
-  @ApiResponse({ status: 200, description: 'نتیجه همگام‌سازی لحظه‌ای' })
+  @ApiOperation({ summary: t('swagger', 'symbolRefresh') })
+  @ApiResponse({ status: 200, description: t('swagger', 'symbolRefreshOk') })
   async refreshSymbols() {
     try {
       return await Promise.race([
@@ -76,7 +78,7 @@ export class SymbolsController {
               totalSymbols: status.totalSymbols,
               ipoCount: status.ipoCount,
               newIpos: [],
-              message: `مهلت همگام‌سازی تمام شد — ${status.totalSymbols} نماد از کش محلی قابل استفاده است.`,
+              message: t('errors', 'syncTimeout', { count: status.totalSymbols }),
             });
           }, 18000);
         }),
@@ -89,7 +91,7 @@ export class SymbolsController {
         totalSymbols: status.totalSymbols,
         ipoCount: status.ipoCount,
         newIpos: [] as string[],
-        message: `همگام‌سازی ناموفق — کش محلی برقرار است (${status.totalSymbols} نماد). ${message}`,
+        message: t('errors', 'syncFailedCache', { count: status.totalSymbols, detail: message }),
       };
     }
   }

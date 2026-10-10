@@ -3,12 +3,15 @@
  * Models matching engine queue arrival priority and probability of execution.
  */
 
+export type QueueVerdictKey = 'rejected' | 'front' | 'competitive' | 'tail';
+
 export interface QueueEstimate {
   estimatedPosition: number;
   arrivalDeltaMs: number;
   successProbabilityPercent: number;
   queueTier: 'VIP_FRONT' | 'TOP_10' | 'COMPETITIVE' | 'TAIL' | 'REJECTED';
-  verdictFarsi: string;
+  verdictKey: QueueVerdictKey;
+  verdictRank: number | null;
 }
 
 /**
@@ -31,7 +34,8 @@ export function estimateQueuePosition(
       arrivalDeltaMs: deltaMs,
       successProbabilityPercent: 0,
       queueTier: 'REJECTED',
-      verdictFarsi: 'زودتر از موعد ارسال شد (خطای خارج از بازه مجاز یا ریجکت هسته)',
+      verdictKey: 'rejected',
+      verdictRank: null,
     };
   }
 
@@ -43,7 +47,8 @@ export function estimateQueuePosition(
       arrivalDeltaMs: deltaMs,
       successProbabilityPercent: Math.max(85, 100 - rank * 3),
       queueTier: rank <= 5 ? 'VIP_FRONT' : 'TOP_10',
-      verdictFarsi: `فوق‌العاده! رتبه سرخطی تخمینی: #${rank} (احتمال معامله بسیار بالا)`,
+      verdictKey: 'front',
+      verdictRank: rank,
     };
   }
 
@@ -55,7 +60,8 @@ export function estimateQueuePosition(
       arrivalDeltaMs: deltaMs,
       successProbabilityPercent: Math.max(35, 75 - (rank - 20) * 0.5),
       queueTier: 'COMPETITIVE',
-      verdictFarsi: `خوب؛ رتبه در صف تخمینی: #${rank} (بسته به حجم عرضه اولیه شانس تخصیص دارد)`,
+      verdictKey: 'competitive',
+      verdictRank: rank,
     };
   }
 
@@ -66,6 +72,7 @@ export function estimateQueuePosition(
     arrivalDeltaMs: deltaMs,
     successProbabilityPercent: Math.max(2, 25 - (rank / 100)),
     queueTier: 'TAIL',
-    verdictFarsi: `انتهای صف (#${rank})؛ نیاز به کاهش پینگ شبکه یا تنظیم دقیق‌تر Lead Time`,
+    verdictKey: 'tail',
+    verdictRank: rank,
   };
 }

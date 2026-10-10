@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import { BROKER_PRESETS, BrokerPreset, resolveBrokerPresetId } from './broker-presets.js';
 import { CurlParser, AdvancedCurlParseResult } from './curl-parser.js';
 import { BotConfigService } from '../bot-config/bot-config.service.js';
@@ -21,7 +22,7 @@ export class BrokersService {
     config: BotConfig;
   } {
     if (!rawCurl || typeof rawCurl !== 'string') {
-      throw new BadRequestException('دستور cURL ارسال نشده است.');
+      throw new BadRequestException(t('errors', 'curlMissing'));
     }
 
     const parsed = CurlParser.parseAdvanced(rawCurl);

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { JetBrains_Mono } from 'next/font/google';
 import localFont from 'next/font/local';
+import { NextIntlClientProvider } from 'next-intl';
+import { locale, messages, t } from '@saf-shekan/i18n';
 import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
@@ -19,8 +21,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'صف‌شکن (SafShekan) - ترمینال سرخطی‌زن فوق‌سریع بورس تهران',
-  description: 'ترمینال سرخطی بورس تهران با ساعت NTP، شلیک رگباری و دیده‌بان TSETMC',
+  title: t('common', 'brandTitle'),
+  description: t('common', 'brandDescription'),
   robots: { index: false, follow: false },
 };
 
@@ -39,7 +41,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       suppressHydrationWarning
     >
       <body className="min-h-screen antialiased" suppressHydrationWarning>
-        <ThemeProvider>{children}</ThemeProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <ThemeProvider>{children}</ThemeProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

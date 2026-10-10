@@ -8,13 +8,15 @@
 
 Structure only. Frontend visual source is the Stitch terminal. Do not port ZARVA layouts, icons, or page anatomy.
 
-**Rules:** `.cursor/rules/core.mdc` and `zero-nextjs-issues.mdc` (always). On demand: `architecture`, `components`, `frontend`, `typescript`, `security`, `testing`, `market-domain`, `documentation`.
+**Rules:** `.cursor/rules/core.mdc`, `zero-nextjs-issues.mdc`, and `i18n.mdc` (always). On demand: `architecture`, `components`, `frontend`, `typescript`, `security`, `testing`, `market-domain`, `documentation`. User-visible Persian lives only in `packages/i18n/messages/fa`.
 
-**Frontend skills:** `saf-shekan-frontend`, then `vercel-react-best-practices`, `vercel-composition-patterns`, `building-components`, `react-expert`. `shadcn` only when adding a missing primitive. Security and tests: `testing-vitest`, `security-test-generator`, `injection-checker`, `api-security-review`.
+**Frontend skills:** `saf-shekan-frontend`, then `saf-shekan-figures` when UI shows digits or Persian copy, then `vercel-react-best-practices`, `vercel-composition-patterns`, `building-components`, `react-expert`. `shadcn` only when adding a missing primitive. Security and tests: `testing-vitest`, `security-test-generator`, `injection-checker`, `api-security-review`.
 
 **Backend skills:** `saf-shekan-backend`, then `nestjs-architecture-principles`, `nestjs-best-practices`, `nestjs-oop-design-patterns`, `nestjs-features-performance`, `nestjs-code-audit`. Security: `api-security-review`, `injection-checker`, `openapi-hardener`, `security-test-generator`. Tests: `testing-vitest`.
 
 **Cross-cutting:** `market-domain`.
+
+**CodeGraph:** Local index at `.codegraph/` (gitignored). For structural questions use the `codegraph_explore` MCP tool, or `codegraph explore "<question>"`. If the directory is missing, run `codegraph init` from the repo root. The index auto-syncs on file changes. Cursor rule: `.cursor/rules/codegraph.mdc`.
 
 # Frontend UI & Component Standards (Mandatory shadcn/ui)
 

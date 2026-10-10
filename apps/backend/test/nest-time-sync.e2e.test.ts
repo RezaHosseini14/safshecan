@@ -24,7 +24,7 @@ describe('NestJS TimeSync & Network E2E', () => {
 
     expect(res.body.success).toBe(true);
     expect(res.body.status.offsetMs).toBe(-45);
-    expect(res.body.status.source).toContain('دستی');
+    expect(res.body.status.source).toBe('manual');
   });
 
   it('POST /api/network/ping should test ping latency', async () => {

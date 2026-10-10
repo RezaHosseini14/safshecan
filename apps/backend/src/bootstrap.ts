@@ -1,10 +1,36 @@
 import 'reflect-metadata';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ValidationError } from 'class-validator';
 import helmet from 'helmet';
+import { messages, t, type MessageKey } from '@saf-shekan/i18n';
 import { AppModule } from './app.module.js';
+
+function isValidationKey(key: string): key is MessageKey<'validation'> {
+  return Object.prototype.hasOwnProperty.call(messages.validation, key);
+}
+
+function validationLines(errors: ValidationError[], parent = ''): string[] {
+  const lines: string[] = [];
+  for (const error of errors) {
+    const field = parent ? `${parent}.${error.property}` : error.property;
+    const constraints = error.constraints ? Object.keys(error.constraints) : [];
+    if (constraints.length === 0 && !(error.children && error.children.length > 0)) {
+      lines.push(t('validation', 'invalid', { field }));
+    }
+    for (const name of constraints) {
+      lines.push(
+        isValidationKey(name) ? t('validation', name, { field }) : t('validation', 'invalid', { field })
+      );
+    }
+    if (error.children && error.children.length > 0) {
+      lines.push(...validationLines(error.children, field));
+    }
+  }
+  return lines;
+}
 
 export async function createNestApp() {
   const app = await NestFactory.create(AppModule, {
@@ -35,25 +61,27 @@ export async function createNestApp() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: false,
+      exceptionFactory: (errors: ValidationError[]) =>
+        new BadRequestException(validationLines(errors).join(' | ')),
     })
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('⚡ صف‌شکن (SafShekan) - High-Precision HFT Sniping API')
-    .setDescription('مستندات تعاملی و Enterprise ربات سرخطی‌زن بورس تهران، ساعت اتمی و موتور شلیک رگباری')
+    .setTitle(t('swagger', 'title'))
+    .setDescription(t('swagger', 'description'))
     .setVersion('2.0')
-    .addTag('Sniper Engine & System Status', 'وضعیت موتور، مسلح‌سازی و نتایج شلیک')
-    .addTag('Config', 'تنظیمات و پیکربندی ربات')
-    .addTag('TimeSync', 'کالیبراسیون ساعت اتمی با NTP و HTTP')
-    .addTag('Network & Broker', 'تست پینگ و پیش‌گرمایش SSL')
-    .addTag('Brokers & cURL', 'تحلیلگر پیشرفته cURL و قالب کارگزاری‌ها')
-    .addTag('Symbols', 'جستجوی نمادهای بورس و فرابورس')
-    .addTag('Market Data', 'قیمت لحظه‌ای، حجم و صف خرید/فروش از TSETMC')
+    .addTag('Sniper Engine & System Status', t('swagger', 'tag.sniper'))
+    .addTag('Config', t('swagger', 'tag.config'))
+    .addTag('TimeSync', t('swagger', 'tag.time'))
+    .addTag('Network & Broker', t('swagger', 'tag.network'))
+    .addTag('Brokers & cURL', t('swagger', 'tag.brokers'))
+    .addTag('Symbols', t('swagger', 'tag.symbols'))
+    .addTag('Market Data', t('swagger', 'tag.market'))
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document, {
-    customSiteTitle: 'صف‌شکن | مستندات API',
+    customSiteTitle: t('swagger', 'siteTitle'),
   });
 
   return app;

@@ -18,6 +18,9 @@
     "test": "vitest run",
     "clean": "rimraf dist"
   },
+  "dependencies": {
+    "@saf-shekan/i18n": "workspace:*"
+  },
   "devDependencies": {
     "@saf-shekan/tsconfig": "workspace:*",
     "rimraf": "^6.0.1",

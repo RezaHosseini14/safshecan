@@ -1,4 +1,7 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import { SymbolsService, SymbolItem } from './symbols.service.js';
 import {
   TsetmcClient,
@@ -19,6 +22,16 @@ const POLL_MS = 3000;
 const CACHE_TTL_MS = 1500;
 /** Hard ceiling so quote never hangs the HTTP request (UI / proxy timeouts → fake 500). */
 const QUOTE_DEADLINE_MS = 6500;
+
+function watchlistFile(): string {
+  const dirs = [
+    resolve(__dirname, '../../data'),
+    resolve(process.cwd(), 'data'),
+    resolve(process.cwd(), 'apps/backend/data'),
+  ];
+  const dir = dirs.find((item) => existsSync(item)) ?? dirs[0];
+  return resolve(dir, 'watchlist.json');
+}
 
 function withDeadline<T>(promise: Promise<T>, ms: number, fallback: () => T): Promise<T> {
   return new Promise<T>((resolve) => {
@@ -45,7 +58,7 @@ function withDeadline<T>(promise: Promise<T>, ms: number, fallback: () => T): Pr
 }
 
 @Injectable()
-export class MarketDataService implements OnModuleDestroy {
+export class MarketDataService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MarketDataService.name);
   private readonly watchlist = new Set<string>();
   private readonly quoteCache = new Map<string, { quote: LiveQuote; at: number }>();
@@ -59,6 +72,11 @@ export class MarketDataService implements OnModuleDestroy {
     private readonly tsetmc: TsetmcClient,
     private readonly gateway: SniperGateway
   ) {}
+
+  onModuleInit() {
+    this.loadWatchlist();
+    if (this.watchlist.size > 0) this.ensurePolling();
+  }
 
   onModuleDestroy() {
     this.stopPolling();
@@ -77,12 +95,15 @@ export class MarketDataService implements OnModuleDestroy {
   public watch(symbol: string): { ok: true; watchlist: string[] } {
     try {
       const key = normalizePersian((symbol || '').trim());
-      if (key) {
+      if (key && !this.watchlist.has(key)) {
         this.watchlist.add(key);
+        this.persistWatchlist();
         this.ensurePolling();
         void this.refreshOne(key).catch((err: unknown) => {
           this.lastError = err instanceof Error ? err.message : String(err);
         });
+      } else if (key) {
+        this.ensurePolling();
       }
     } catch (err: unknown) {
       this.lastError = err instanceof Error ? err.message : String(err);
@@ -92,12 +113,41 @@ export class MarketDataService implements OnModuleDestroy {
 
   public unwatch(symbol: string): { ok: true; watchlist: string[] } {
     try {
-      this.watchlist.delete(normalizePersian((symbol || '').trim()));
+      const removed = this.watchlist.delete(normalizePersian((symbol || '').trim()));
+      if (removed) this.persistWatchlist();
       if (this.watchlist.size === 0) this.stopPolling();
     } catch {
       // ignore
     }
     return { ok: true, watchlist: Array.from(this.watchlist) };
+  }
+
+  private loadWatchlist() {
+    const file = watchlistFile();
+    if (!existsSync(file)) return;
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
+      if (!Array.isArray(parsed)) return;
+      for (const item of parsed) {
+        if (typeof item !== 'string') continue;
+        const key = normalizePersian(item.trim());
+        if (key) this.watchlist.add(key);
+      }
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.warn(t('logs', 'watchlistReadFail', { detail }));
+    }
+  }
+
+  private persistWatchlist() {
+    const file = watchlistFile();
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, JSON.stringify(Array.from(this.watchlist), null, 2), 'utf8');
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.warn(t('logs', 'watchlistWriteFail', { detail }));
+    }
   }
 
   /** Always resolves with a LiveQuote — never throws, never hangs past QUOTE_DEADLINE_MS. */
@@ -106,7 +156,7 @@ export class MarketDataService implements OnModuleDestroy {
     const key = normalizePersian(raw);
 
     if (!key) {
-      return this.emptyQuote('', 'نماد ارسال نشده است.');
+      return this.emptyQuote('', t('errors', 'symbolMissing'));
     }
 
     const cached = this.quoteCache.get(key);
@@ -140,8 +190,8 @@ export class MarketDataService implements OnModuleDestroy {
       return {
         ...soft,
         degraded: true,
-        stateTitle: 'کش محلی',
-        warning: 'اتصال لحظه‌ای TSETMC برقرار نشد — آخرین داده ذخیره‌شده',
+        stateTitle: t('common', 'localCache'),
+        warning: t('errors', 'quoteStale'),
       };
     }
 
@@ -152,7 +202,7 @@ export class MarketDataService implements OnModuleDestroy {
       const fallback =
         soft ||
         this.quoteFromSymbolCache(key, undefined, 'timeout') ||
-        this.emptyQuote(raw, 'پاسخ TSETMC طول کشید — داده موقت نمایش داده شد');
+        this.emptyQuote(raw, t('errors', 'quoteSlowTemp'));
       return fallback;
     });
   }
@@ -177,7 +227,7 @@ export class MarketDataService implements OnModuleDestroy {
       volume: 0,
       value: 0,
       tradesCount: 0,
-      stateTitle: 'بدون داده',
+      stateTitle: t('common', 'noData'),
       orderBook: [],
       clientFlow: null,
       fetchedAt: new Date().toISOString(),
@@ -294,13 +344,13 @@ export class MarketDataService implements OnModuleDestroy {
   private async refreshOne(symbol: string): Promise<LiveQuote> {
     const meta = await this.resolveInsCode(symbol);
     if (!meta) {
-      return this.emptyQuote(symbol, `نماد «${symbol}» یافت نشد.`);
+      return this.emptyQuote(symbol, t('errors', 'symbolNotFound', { symbol }));
     }
 
     if (!meta.insCode) {
       const fallback = this.quoteFromSymbolCache(meta.symbol, meta.cached);
       if (fallback) return fallback;
-      return this.emptyQuote(meta.symbol, 'کد ابزار (insCode) در دسترس نیست.');
+      return this.emptyQuote(meta.symbol, t('errors', 'insCodeMissing'));
     }
 
     const [infoResult, limitsResult, clientResult] = await Promise.allSettled([
@@ -321,7 +371,7 @@ export class MarketDataService implements OnModuleDestroy {
         fallback.clientFlow = this.mapClientFlow(clientType);
         // Keep order book if BestLimits succeeded even when ClosingPriceInfo failed
         if (fallback.orderBook.length > 0) {
-          fallback.warning = 'قیمت لحظه‌ای از کش — صف سفارش از TSETMC';
+          fallback.warning = t('errors', 'quoteCacheBook');
         }
         this.storeAndBroadcast(fallback);
         return fallback;
@@ -331,7 +381,7 @@ export class MarketDataService implements OnModuleDestroy {
           ? infoResult.reason instanceof Error
             ? infoResult.reason.message
             : String(infoResult.reason)
-          : 'پاسخ خالی از TSETMC';
+          : t('errors', 'quoteEmpty');
       return this.emptyQuote(meta.symbol, reason);
     }
 
@@ -356,15 +406,13 @@ export class MarketDataService implements OnModuleDestroy {
     const lastPrice = Number(info.pDrCotVal || info.pClosing || 0);
     const closingPrice = Number(info.pClosing || 0);
     const yesterdayPrice = Number(info.priceYesterday || 0);
-    const change =
-      info.priceChange != null
-        ? Number(info.priceChange)
-        : yesterdayPrice
-          ? lastPrice - yesterdayPrice
-          : 0;
+    const priceGap = yesterdayPrice ? lastPrice - yesterdayPrice : 0;
+    const reportedChange = info.priceChange != null ? Number(info.priceChange) : priceGap;
+    const change = reportedChange === 0 && priceGap !== 0 ? priceGap : reportedChange;
+    const reportedPercent = info.priceChangePercent != null ? Number(info.priceChangePercent) : null;
     const changePercent =
-      info.priceChangePercent != null
-        ? Number(info.priceChangePercent)
+      reportedPercent != null && !(reportedPercent === 0 && change !== 0)
+        ? reportedPercent
         : yesterdayPrice
           ? (change / yesterdayPrice) * 100
           : 0;
@@ -414,8 +462,8 @@ export class MarketDataService implements OnModuleDestroy {
       reason === 'refreshing'
         ? undefined
         : reason === 'timeout'
-          ? 'پاسخ TSETMC طول کشید — آخرین داده ذخیره‌شده نمایش داده شد'
-          : 'اتصال لحظه‌ای TSETMC برقرار نشد — آخرین داده ذخیره‌شده';
+          ? t('errors', 'quoteSlowCache')
+          : t('errors', 'quoteStale');
 
     return {
       ok: true,
@@ -438,7 +486,7 @@ export class MarketDataService implements OnModuleDestroy {
       volume: Number(cached.volume || 0),
       value: Number(cached.value || 0),
       tradesCount: Number(cached.tradesCount || 0),
-      stateTitle: reason === 'refreshing' ? 'در حال بروزرسانی…' : 'کش محلی',
+      stateTitle: reason === 'refreshing' ? t('common', 'refreshing') : t('common', 'localCache'),
       orderBook: [],
       clientFlow: null,
       fetchedAt: new Date().toISOString(),

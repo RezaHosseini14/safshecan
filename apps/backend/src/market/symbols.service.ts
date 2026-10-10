@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { t } from '@saf-shekan/i18n';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +46,17 @@ export interface SymbolItem {
   lastUpdated?: string;
 }
 
+function briefSymbol(item: SymbolItem): SymbolItem {
+  return {
+    symbol: item.symbol,
+    name: item.name,
+    isin: item.isin,
+    insCode: item.insCode,
+    group: item.group,
+    market: item.market,
+  };
+}
+
 export interface SyncStatus {
   totalSymbols: number;
   ipoCount: number;
@@ -70,15 +82,17 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
   public onModuleInit() {
     // Proactively start a background sync on startup without blocking Nest initialization
     setTimeout(() => {
-      this.syncFromTsetmc().catch((err) => {
-        this.logger.warn(`خطا در همگام‌سازی اولیه با TSETMC: ${err.message}`);
+      this.syncFromTsetmc().catch((err: unknown) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        this.logger.warn(t('logs', 'symbolBootFail', { detail }));
       });
     }, 1000);
 
     // Schedule regular sync every 5 minutes
     this.syncTimer = setInterval(() => {
-      this.syncFromTsetmc().catch((err) => {
-        this.logger.warn(`خطا در دوره‌ی همگام‌سازی TSETMC: ${err.message}`);
+      this.syncFromTsetmc().catch((err: unknown) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        this.logger.warn(t('logs', 'symbolLoopFail', { detail }));
       });
     }, 5 * 60 * 1000);
   }
@@ -131,8 +145,8 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
           for (const item of historical) {
             if (item.symbol) {
               this.iposMap.set(item.symbol.trim(), {
-                title: `عرضه اولیه ${item.name || item.symbol}`,
-                description: item.description || `عرضه اولیه مورخ ${item.listingDate || ''}`,
+                title: t('dossier', 'ipoTitle', { name: item.name || item.symbol }),
+                description: item.description || t('dossier', 'ipoDescription', { date: item.listingDate || '' }),
                 dateStr: item.listingDate,
                 status: 'RECENT',
                 source: 'HISTORICAL_DATABASE',
@@ -142,7 +156,7 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
           }
         }
       } catch (err: any) {
-        this.logger.error(`خطا در بارگذاری historical-ipos.json: ${err.message}`);
+        this.logger.error(t('logs', 'historicalFail', { detail: err.message }));
       }
     }
 
@@ -163,11 +177,11 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
               ipoDetails: isIpo ? (this.iposMap.get(sym) || item.ipoDetails) : undefined,
             });
           }
-          this.logger.log(`✓ تعداد ${this.symbolsMap.size} نماد اولیه از دیتابیس محلی بارگذاری شد.`);
+          this.logger.log(t('logs', 'symbolsLoaded', { count: this.symbolsMap.size }));
           return;
         }
       } catch (err: any) {
-        this.logger.error(`خطا در بارگذاری symbols.json: ${err.message}`);
+        this.logger.error(t('logs', 'symbolsFileFail', { detail: err.message }));
       }
     }
   }
@@ -178,19 +192,19 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
   private getMarketTitle(flow: number): string {
     switch (flow) {
       case 1:
-        return 'بورس';
+        return t('dossier', 'market.bourse');
       case 2:
-        return 'فرابورس';
+        return t('dossier', 'market.farabourse');
       case 3:
-        return 'پایه فرابورس';
+        return t('dossier', 'market.base');
       case 4:
-        return 'بورس کالا';
+        return t('dossier', 'market.commodity');
       case 5:
-        return 'بورس انرژی';
+        return t('dossier', 'market.energy');
       case 7:
-        return 'مشتقه / آتی';
+        return t('dossier', 'market.derivative');
       default:
-        return 'بورس';
+        return t('dossier', 'market.bourse');
     }
   }
 
@@ -210,7 +224,7 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
         totalSymbols: this.symbolsMap.size,
         ipoCount: this.getIpos().length,
         newIpos: [],
-        message: 'همگام‌سازی در حال حاضر در حال اجرا است.',
+        message: t('errors', 'syncBusy'),
       };
     }
 
@@ -219,7 +233,7 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
     const newlyDetectedIpos: string[] = [];
 
     try {
-      this.logger.log('در حال دریافت اطلاعات دیده‌بان بازار و پیام‌های ناظر از TSETMC...');
+      this.logger.log(t('logs', 'supervisorFetch'));
 
       // 1. Fetch live supervisor messages for Bourse and Farabourse (hard deadline)
       let msgsFlow1: any[] = [];
@@ -231,12 +245,12 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
             this.tsetmcClient.fetchSupervisorMessages(2, 100),
           ]),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('مهلت دریافت پیام‌های ناظر به پایان رسید')), 10000)
+            setTimeout(() => reject(new Error(t('errors', 'supervisorTimeout'))), 10000)
           ),
         ]);
       } catch (msgErr: unknown) {
         const msg = msgErr instanceof Error ? msgErr.message : String(msgErr);
-        this.logger.warn(`دریافت پیام‌های ناظر با خطا مواجه شد: ${msg}`);
+        this.logger.warn(t('logs', 'supervisorFail', { detail: msg }));
       }
 
       const allMsgs = [...msgsFlow1, ...msgsFlow2];
@@ -276,7 +290,7 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
           }
         }
         if (detected.length > 0) {
-          this.logger.log(`✓ تعداد ${detected.length} اطلاعیه عرضه اولیه و پذیره‌نویسی از پیام‌های ناظر استخراج شد.`);
+          this.logger.log(t('logs', 'ipoExtracted', { count: detected.length }));
         }
       }
 
@@ -286,19 +300,19 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
         rawWatch = await Promise.race([
           this.tsetmcClient.fetchMarketWatch(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('مهلت دریافت دیده‌بان بازار به پایان رسید')), 15000)
+            setTimeout(() => reject(new Error(t('errors', 'watchTimeout'))), 15000)
           ),
         ]);
       } catch (watchErr: unknown) {
         const msg = watchErr instanceof Error ? watchErr.message : String(watchErr);
         this.lastError = msg;
-        this.logger.warn(`دیده‌بان بازار در دسترس نیست: ${msg}`);
+        this.logger.warn(t('logs', 'watchFail', { detail: msg }));
         return {
           success: false,
           totalSymbols: this.symbolsMap.size,
           ipoCount: this.getIpos().length,
           newIpos: newlyDetectedIpos,
-          message: `TSETMC پاسخ نداد — ${this.symbolsMap.size} نماد از کش محلی قابل استفاده است.`,
+          message: t('errors', 'tsetmcDown', { count: this.symbolsMap.size }),
         };
       }
       if (Array.isArray(rawWatch) && rawWatch.length > 0) {
@@ -339,7 +353,7 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
 
           this.symbolsMap.set(sym, updated);
         }
-        this.logger.log(`✓ دیده‌بان بازار بروزرسانی شد: ${rawWatch.length} نماد پردازش شدند.`);
+        this.logger.log(t('logs', 'watchUpdated', { count: rawWatch.length }));
       }
 
       // Ensure all detected IPOs are in the symbols map even if not currently trading in MarketWatch
@@ -347,9 +361,9 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
         if (!this.symbolsMap.has(sym)) {
           this.symbolsMap.set(sym, {
             symbol: sym,
-            name: details.title || `عرضه اولیه ${sym}`,
+            name: details.title || t('dossier', 'ipoTitle', { name: sym }),
             isin: '',
-            market: 'فرابورس / بورس',
+            market: t('dossier', 'market.mixed'),
             isIpo: true,
             ipoDetails: details,
             lastUpdated: new Date().toLocaleTimeString('fa-IR'),
@@ -367,17 +381,17 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
         totalSymbols: this.symbolsMap.size,
         ipoCount: this.getIpos().length,
         newIpos: newlyDetectedIpos,
-        message: `همگام‌سازی موفقیت‌آمیز: ${this.symbolsMap.size} نماد و ${this.getIpos().length} عرضه اولیه بروزرسانی شد.`,
+        message: t('errors', 'syncOk', { symbols: this.symbolsMap.size, ipos: this.getIpos().length }),
       };
     } catch (err: any) {
       this.lastError = err.message;
-      this.logger.error(`خطا در همگام‌سازی زنده با TSETMC: ${err.message}`);
+      this.logger.error(t('logs', 'liveSyncFail', { detail: err.message }));
       return {
         success: false,
         totalSymbols: this.symbolsMap.size,
         ipoCount: this.getIpos().length,
         newIpos: [],
-        message: `خطا در برقراری ارتباط با بورس: ${err.message}`,
+        message: t('errors', 'bourseDown', { detail: err.message }),
       };
     } finally {
       this.isSyncing = false;
@@ -393,7 +407,7 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
       if (symbolsPath) {
         const array = Array.from(this.symbolsMap.values());
         fs.writeFile(symbolsPath, JSON.stringify(array, null, 2), 'utf8', (err) => {
-          if (err) this.logger.warn(`ذخیره فایل نمادها روی دیسک با خطا مواجه شد: ${err.message}`);
+          if (err) this.logger.warn(t('logs', 'symbolDiskFail', { detail: err.message }));
         });
       }
     } catch {
@@ -409,7 +423,8 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
     query?: string,
     onlyIpo?: boolean,
     market?: string,
-    limit = 150
+    limit = 150,
+    brief = false
   ): SymbolItem[] {
     try {
       let list = Array.from(this.symbolsMap.values());
@@ -452,7 +467,8 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
       });
 
       const cap = Math.min(Math.max(Number(limit) || 150, 1), 10_000);
-      return list.slice(0, cap);
+      const page = list.slice(0, cap);
+      return brief ? page.map(briefSymbol) : page;
     } catch (err: unknown) {
       this.logger.error(
         `search failed: ${err instanceof Error ? err.message : String(err)}`

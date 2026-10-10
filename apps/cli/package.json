@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@saf-shekan/core": "workspace:*",
+    "@saf-shekan/i18n": "workspace:*",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
     "undici": "^6.21.1"

@@ -1,4 +1,7 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+const withNextIntl = createNextIntlPlugin();
 
 const securityHeaders = [
   {
@@ -49,6 +52,7 @@ const isExport = process.env.NEXT_EXPORT === 'true';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  transpilePackages: ['@saf-shekan/i18n'],
   poweredByHeader: false,
   output: isExport ? 'export' : undefined,
   ...(!isExport && {
@@ -78,4 +82,4 @@ const nextConfig: NextConfig = {
   }),
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

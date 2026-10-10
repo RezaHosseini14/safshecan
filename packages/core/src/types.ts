@@ -140,6 +140,8 @@ export interface SymbolItem {
   volume?: number;
   value?: number;
   tradesCount?: number;
+  eps?: number | null;
+  pe?: number | string | null;
   lastUpdated?: string;
 }
 

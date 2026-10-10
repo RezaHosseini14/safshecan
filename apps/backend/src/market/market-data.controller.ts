@@ -1,21 +1,29 @@
-import { Body, Controller, Delete, Get, HttpCode, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, HttpCode, Post, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
+import { t } from '@saf-shekan/i18n';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { MarketDataService } from './market-data.service.js';
-import { MarketQuoteQueryDto, MarketWatchBodyDto } from './dto/market-data.dto.js';
+import { MarketDossierService } from './market-dossier.service.js';
+import { PersianSpeechService } from './persian-speech.service.js';
+import { MarketQuoteQueryDto, MarketSpeechBodyDto, MarketWatchBodyDto } from './dto/market-data.dto.js';
 import { LiveQuote, MarketDataStatus } from './market-data.types.js';
+import { MarketDossier } from './market-dossier.types.js';
 
 @ApiTags('Market Data')
 @SkipThrottle()
 @Controller('api/market')
 export class MarketDataController {
-  constructor(private readonly marketData: MarketDataService) {}
+  constructor(
+    private readonly marketData: MarketDataService,
+    private readonly dossier: MarketDossierService,
+    private readonly speech: PersianSpeechService
+  ) {}
 
   @Get('status')
   @HttpCode(200)
-  @ApiOperation({ summary: 'وضعیت پایش لحظه‌ای بازار (watchlist / poll)' })
-  @ApiResponse({ status: 200, description: 'وضعیت Market Data' })
+  @ApiOperation({ summary: t('swagger', 'marketStatus') })
+  @ApiResponse({ status: 200, description: t('swagger', 'marketStatusOk') })
   getStatus(): MarketDataStatus {
     try {
       return this.marketData.getStatus();
@@ -33,9 +41,9 @@ export class MarketDataController {
   @Get('quote')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'قیمت لحظه‌ای، حجم معاملات، صف خرید/فروش و حقیقی/حقوقی یک نماد از TSETMC',
+    summary: t('swagger', 'quote'),
   })
-  @ApiResponse({ status: 200, description: 'نقل‌قول زنده نماد (همیشه 200)' })
+  @ApiResponse({ status: 200, description: t('swagger', 'quoteOk') })
   async getQuote(
     @Query() query: MarketQuoteQueryDto,
     @Res({ passthrough: true }) res: Response
@@ -45,7 +53,7 @@ export class MarketDataController {
     try {
       return await this.marketData.getQuote(query.symbol || '', force);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطای ناشناخته';
+      const msg = err instanceof Error ? err.message : t('common', 'unknownError');
       return {
         ok: false,
         degraded: true,
@@ -65,7 +73,7 @@ export class MarketDataController {
         volume: 0,
         value: 0,
         tradesCount: 0,
-        stateTitle: 'بدون داده',
+        stateTitle: t('common', 'noData'),
         orderBook: [],
         clientFlow: null,
         fetchedAt: new Date().toISOString(),
@@ -74,16 +82,43 @@ export class MarketDataController {
     }
   }
 
+  @Get('dossier')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: t('swagger', 'dossier'),
+  })
+  @ApiResponse({ status: 200, description: t('swagger', 'dossierOk') })
+  async getDossier(
+    @Query() query: MarketQuoteQueryDto,
+    @Res({ passthrough: true }) res: Response
+  ): Promise<MarketDossier> {
+    res.status(200);
+    const force = query.force === 'true' || query.force === '1';
+    return this.dossier.getDossier(query.symbol || '', force);
+  }
+
+  @Post('speech')
+  @SkipThrottle({ default: false })
+  @Throttle({ default: { limit: 12, ttl: 60000 } })
+  @Header('Content-Type', 'audio/mpeg')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: t('swagger', 'speech') })
+  @ApiResponse({ status: 200, description: t('swagger', 'speechOk') })
+  async speak(@Body() body: MarketSpeechBodyDto): Promise<StreamableFile> {
+    const audio = await this.speech.synthesize(body.text);
+    return new StreamableFile(audio);
+  }
+
   @Post('watch')
   @HttpCode(200)
-  @ApiOperation({ summary: 'افزودن نماد به watchlist پایش لحظه‌ای (پخش روی WebSocket)' })
+  @ApiOperation({ summary: t('swagger', 'watchAdd') })
   watch(@Body() body: MarketWatchBodyDto) {
     return this.marketData.watch(body?.symbol || '');
   }
 
   @Delete('watch')
   @HttpCode(200)
-  @ApiOperation({ summary: 'حذف نماد از watchlist' })
+  @ApiOperation({ summary: t('swagger', 'watchRemove') })
   unwatch(@Query('symbol') symbol?: string) {
     return this.marketData.unwatch(symbol || '');
   }

@@ -1,8 +1,9 @@
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { t } from '@saf-shekan/i18n';
 
 export class ApplyPresetDto {
-  @ApiProperty({ example: 'tadbir', description: 'شناسه کارگزاری مورد نظر' })
+  @ApiProperty({ example: 'tadbir', description: t('swagger', 'brokerId') })
   @IsString()
   @IsNotEmpty()
   presetId!: string;

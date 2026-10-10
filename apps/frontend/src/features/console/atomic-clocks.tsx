@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { RefreshCw, SlidersHorizontal, Timer } from 'lucide-react';
 import type { TimeSyncStatus } from '@saf-shekan/core';
 import { Num } from '@/components/num';
@@ -26,6 +27,7 @@ export function AtomicClocks({
   onSync: () => void;
   onNudgeOffset: (delta: number) => void;
 }) {
+  const t = useTranslations('console');
   const nowMs = clockToMs(`${exactTime}${exactMs.startsWith('.') ? exactMs : `.${exactMs}`}`);
   const targetMs = clockToMs(targetTime);
   const remaining =
@@ -40,12 +42,12 @@ export function AtomicClocks({
               <Timer className="h-5 w-5" />
             </span>
             <div>
-              <h2 className="text-sm font-bold">ساعت اتمی استاندارد بورس (NTP)</h2>
-              <p className="text-[11px] text-slate-400">کالیبره شده با سرور مرجع زمانی</p>
+              <h2 className="text-sm font-bold">{t('clockTitle')}</h2>
+              <p className="text-[11px] text-slate-400">{t('clockHint')}</p>
             </div>
           </div>
           <Badge variant="emerald">
-            {timeSync?.synchronized ? timeSync.source || 'NTP' : 'در انتظار همگام‌سازی'}
+            {timeSync?.synchronized ? timeSync.source || 'NTP' : t('awaitingSync')}
           </Badge>
         </div>
         <div className="py-4 text-center">
@@ -57,7 +59,7 @@ export function AtomicClocks({
         <div className="flex items-center justify-between border-t border-white/6 pt-3 text-xs">
           <Button type="button" variant="outline" size="sm" onClick={onSync}>
             <RefreshCw className="h-3.5 w-3.5" />
-            همگام‌سازی فوری
+            {t('syncNow')}
           </Button>
           <div className="text-[11px] text-slate-400" dir="ltr">
             OFFSET:{' '}
@@ -88,8 +90,8 @@ export function AtomicClocks({
               <SlidersHorizontal className="h-5 w-5" />
             </span>
             <div>
-              <h2 className="text-sm font-bold">شمارش معکوس شلیک</h2>
-              <p className="text-[11px] text-slate-400">زمان دقیق ارسال سفارش سرخطی</p>
+              <h2 className="text-sm font-bold">{t('countdownTitle')}</h2>
+              <p className="text-[11px] text-slate-400">{t('countdownHint')}</p>
             </div>
           </div>
           <Badge variant="cyan">
@@ -104,7 +106,7 @@ export function AtomicClocks({
         </div>
         <div className="flex items-center justify-between border-t border-white/6 pt-3 text-xs">
           <div className="flex items-center gap-1">
-            <span className="text-[11px] text-slate-400">آفست دستی:</span>
+            <span className="text-[11px] text-slate-400">{t('manualOffset')}</span>
             {[-5, -1, 1, 5].map((delta) => (
               <Button key={delta} type="button" variant="outline" size="sm" className="h-7 px-2" onClick={() => onNudgeOffset(delta)}>
                 <Num>{delta > 0 ? `+${delta}` : delta}</Num>ms

@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { t } from '@saf-shekan/i18n';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -19,7 +20,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const path = request.url || '';
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'خطای داخلی سرور رخ داده است.';
+    let message = t('errors', 'internal');
     let errorDetails: unknown = null;
 
     if (exception instanceof HttpException) {
@@ -64,7 +65,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           volume: 0,
           value: 0,
           tradesCount: 0,
-          stateTitle: 'بدون داده',
+          stateTitle: t('common', 'noData'),
           orderBook: [],
           clientFlow: null,
           fetchedAt: new Date().toISOString(),
@@ -93,7 +94,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           totalSymbols: 0,
           ipoCount: 0,
           newIpos: [],
-          message: message || 'همگام‌سازی ناموفق — کش محلی را امتحان کنید.',
+          message: message || t('errors', 'syncSoft'),
         });
         return;
       }
@@ -114,8 +115,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // Never leak opaque 500 for unexpected errors elsewhere — use 503 with message.
     if (status === HttpStatus.INTERNAL_SERVER_ERROR && !(exception instanceof HttpException)) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
-      if (!message || message === 'خطای داخلی سرور رخ داده است.') {
-        message = 'سرویس موقتاً در دسترس نیست. دوباره تلاش کنید.';
+      if (!message || message === t('errors', 'internal')) {
+        message = t('errors', 'unavailable');
       }
     }
 

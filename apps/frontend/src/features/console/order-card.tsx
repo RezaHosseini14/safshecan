@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Link2 } from 'lucide-react';
 import { calculateBuyFee } from '@saf-shekan/core';
 import type { BotConfig, SymbolItem } from '@saf-shekan/core';
@@ -16,10 +17,10 @@ import { api } from '@/lib/api';
 import { OrderConfigSchema } from '@/lib/security';
 
 const BROKERS = [
-  { id: 'custom', label: 'سفارشی (استخراج خودکار از cURL)' },
-  { id: 'mofid', label: 'مفید آنلاین' },
-  { id: 'agah', label: 'آگاه ایزی‌تریدر' },
-  { id: 'tadbir', label: 'تدبیرپرداز (فارابیکسو / صحرا)' },
+  { id: 'custom', labelKey: 'broker.custom' },
+  { id: 'mofid', labelKey: 'broker.mofid' },
+  { id: 'agah', labelKey: 'broker.agah' },
+  { id: 'tadbir', labelKey: 'broker.tadbir' },
 ] as const;
 
 export function OrderCard({
@@ -36,6 +37,8 @@ export function OrderCard({
   const [picked, setPicked] = useState<SymbolItem | null>(null);
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const quoteSeq = useRef(0);
+  const t = useTranslations('console');
+  const tc = useTranslations('common');
   const order = config.order;
   const parsed = OrderConfigSchema.safeParse({
     symbol: order.symbol,
@@ -84,8 +87,8 @@ export function OrderCard({
               <Link2 className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-sm font-bold">مشخصات نماد و پارامترهای سفارش</h3>
-              <p className="mt-0.5 text-[11px] text-slate-400">تنظیم نماد هدف، قیمت، حجم و سامانه معاملاتی</p>
+              <h3 className="text-sm font-bold">{t('orderTitle')}</h3>
+              <p className="mt-0.5 text-[11px] text-slate-400">{t('orderHint')}</p>
             </div>
           </div>
           <Badge>
@@ -94,7 +97,7 @@ export function OrderCard({
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <Label className="mb-2 block">سامانه کارگزاری</Label>
+            <Label className="mb-2 block">{t('brokerSystem')}</Label>
             <Select
               value={BROKERS.some((item) => item.id === order.brokerType) ? order.brokerType : 'custom'}
               onValueChange={(value) => {
@@ -108,14 +111,14 @@ export function OrderCard({
               <SelectContent>
                 {BROKERS.map((item) => (
                   <SelectItem key={item.id} value={item.id}>
-                    {item.label}
+                    {t(item.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <SymbolPicker
-            label="نماد بورسی هدف"
+            label={t('targetSymbol')}
             value={query}
             onQueryChange={(next) => {
               setDraftQuery(next);
@@ -130,22 +133,22 @@ export function OrderCard({
         </div>
         {picked ? (
           <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-[#141924] p-3 text-[11px] md:grid-cols-5">
-            <SymbolFact label="آخرین قیمت" value={shownPrice} unit="ریال" toman={shownPrice} />
-            <SymbolFact label="سقف مجاز" value={ceiling != null && ceiling > 0 ? ceiling : null} unit="ریال" />
-            <SymbolFact label="کف مجاز" value={picked.pMin != null && picked.pMin > 0 ? picked.pMin : null} unit="ریال" />
-            <SymbolFact label="حجم معاملات" value={picked.volume ?? null} unit="سهم" />
+            <SymbolFact label={t('lastPrice')} value={shownPrice} unit={tc('rial')} toman={shownPrice} />
+            <SymbolFact label={t('ceiling')} value={ceiling != null && ceiling > 0 ? ceiling : null} unit={tc('rial')} />
+            <SymbolFact label={t('floor')} value={picked.pMin != null && picked.pMin > 0 ? picked.pMin : null} unit={tc('rial')} />
+            <SymbolFact label={t('tradedVolume')} value={picked.volume ?? null} unit={tc('share')} />
             <SymbolFact
-              label="حجم مبنا"
+              label={t('baseVolume')}
               value={picked.baseVolume != null && Number.isFinite(picked.baseVolume) ? picked.baseVolume : null}
-              unit="سهم"
-              empty="حجم مبنا در دیده‌بان نیست"
+              unit={tc('share')}
+              empty={t('baseVolumeMissing')}
             />
           </div>
         ) : null}
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-2">
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <Label>تعداد سهم (حجم)</Label>
+              <Label>{t('quantity')}</Label>
               <div className="flex gap-1">
                 {[5000, 1000, 500].map((qty) => (
                   <Button key={qty} type="button" variant="chip" onClick={() => onChange({ quantity: qty })}>
@@ -164,10 +167,10 @@ export function OrderCard({
           </div>
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <Label>قیمت هر سهم (ریال)</Label>
+              <Label>{t('priceRial')}</Label>
               {ceiling != null && ceiling > 0 ? (
                 <Button type="button" variant="chip" onClick={() => onChange({ price: ceiling })}>
-                  اعمال سقف مجاز
+                  {t('applyCeiling')}
                 </Button>
               ) : null}
             </div>
@@ -191,15 +194,15 @@ export function OrderCard({
       </div>
       <div className="mt-5 flex items-center justify-between rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-3.5">
         <div>
-          <span className="block text-xs font-bold">ارزش کل سفارش</span>
-          <span className="text-[10px] text-slate-400">شامل کارمزد تخمینی بورس تهران</span>
+          <span className="block text-xs font-bold">{t('orderValue')}</span>
+          <span className="text-[10px] text-slate-400">{t('orderValueHint')}</span>
         </div>
         <div className="text-left" dir="ltr">
           <Num className="text-base font-black text-emerald-400">{fee ? formatNumber(fee.netValue) : '—'}</Num>
-          <span className="ms-2 text-[11px] text-slate-400">ریال</span>
+          <span className="ms-2 text-[11px] text-slate-400">{tc('rial')}</span>
           {fee ? (
             <span className="ms-2 text-[11px] text-slate-500">
-              (<Num>{formatNumber(tomanFromRial(fee.netValue))}</Num> تومان)
+              (<Num>{formatNumber(tomanFromRial(fee.netValue))}</Num> {tc('toman')})
             </span>
           ) : null}
         </div>
@@ -221,6 +224,7 @@ function SymbolFact({
   toman?: number | null;
   empty?: string;
 }) {
+  const tc = useTranslations('common');
   return (
     <div>
       <span className="block text-slate-400">{label}</span>
@@ -232,7 +236,7 @@ function SymbolFact({
       {value != null ? <span className="ms-1 text-slate-500">{unit}</span> : null}
       {toman != null ? (
         <span className="ms-1 text-slate-500">
-          (<Num>{formatNumber(tomanFromRial(toman))}</Num> تومان)
+          (<Num>{formatNumber(tomanFromRial(toman))}</Num> {tc('toman')})
         </span>
       ) : null}
     </div>

@@ -6,6 +6,7 @@ import type {
   SymbolItem,
   TimeSyncStatus,
 } from '@saf-shekan/core';
+import { t } from '@saf-shekan/i18n';
 
 export interface OrderBookLevel {
   level: number;
@@ -63,6 +64,70 @@ export interface MarketStatus {
   isPolling: boolean;
 }
 
+export interface DossierTrade {
+  time: string;
+  price: number;
+  volume: number;
+  value: number;
+  kind: 'normal' | 'large' | 'code-to-code';
+  note: string;
+}
+
+export interface DossierCandle {
+  time: number;
+  label: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface MarketDossier {
+  ok: boolean;
+  degraded: boolean;
+  warning?: string;
+  symbol: string;
+  fundamentals: {
+    pe: number | null;
+    eps: number | null;
+    group: string | null;
+    sharesOutstanding: number | null;
+    floatShares: number | null;
+    floatPercent: number | null;
+  };
+  trades: DossierTrade[];
+  largestTrade: DossierTrade | null;
+  candles: {
+    D: DossierCandle[];
+    M15: DossierCandle[];
+    M5: DossierCandle[];
+    M1: DossierCandle[];
+    tick: DossierCandle[];
+  };
+  indicators: {
+    vwap: number | null;
+    rsi14: number | null;
+    buyerPower: number | null;
+    volumeVsMonth: number | null;
+    volumeVsBase: number | null;
+    coverage: { arrived: number; expected: number };
+  };
+  references: {
+    ceiling: number | null;
+    floor: number | null;
+    vwap: number | null;
+  };
+  narrative: {
+    summary: string;
+    action: string;
+    risk: 'low' | 'medium' | 'high' | 'unknown';
+    riskReason: string;
+  };
+  hasBlock: boolean;
+  fetchedAt: string;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status = 500) {
@@ -76,7 +141,7 @@ const API_PREFIX = '/api';
 
 export function apiUrl(endpoint: string): string {
   if (!endpoint.startsWith('/')) {
-    throw new ApiError('مسیر کلاینت باید با /api شروع شود', 0);
+    throw new ApiError(t('common', 'clientPath'), 0);
   }
   return `${API_PREFIX}${endpoint}`;
 }
@@ -92,7 +157,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   });
 
   if (!response.ok) {
-    let message = `خطای سرور (${response.status})`;
+    let message = t('common', 'serverError', { status: response.status });
     try {
       const body = (await response.json()) as { message?: string | string[] };
       if (Array.isArray(body.message)) message = body.message.join(' | ');
@@ -146,9 +211,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(url ? { url } : {}),
     }),
-  searchSymbols: async (query: string, limit = 80): Promise<SymbolItem[]> => {
+  searchSymbols: async (
+    query: string,
+    limit = 80,
+    options?: { brief?: boolean }
+  ): Promise<SymbolItem[]> => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (query) params.set('q', query);
+    if (options?.brief) params.set('brief', '1');
     try {
       const data = await request<SymbolItem[]>(`/symbols?${params.toString()}`);
       return Array.isArray(data) ? data : [];
@@ -163,12 +233,39 @@ export const api = {
       return null;
     }
   },
+  getMarketDossier: async (symbol: string): Promise<MarketDossier | null> => {
+    try {
+      return await request<MarketDossier>(`/market/dossier?symbol=${encodeURIComponent(symbol)}`);
+    } catch {
+      return null;
+    }
+  },
   getMarketStatus: async (): Promise<MarketStatus> => {
     try {
       return await request<MarketStatus>('/market/status');
     } catch {
-      return { watchlist: [], lastError: 'ارتباط برقرار نشد', isPolling: false };
+      return { watchlist: [], lastError: t('common', 'connectionFailed'), isPolling: false };
     }
+  },
+  speakSummary: async (text: string, signal?: AbortSignal): Promise<Blob> => {
+    const response = await fetch(apiUrl('/market/speech'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Accept: 'audio/mpeg',
+      },
+      body: JSON.stringify({ text }),
+      signal,
+    });
+    if (!response.ok || !response.headers.get('content-type')?.includes('audio')) {
+      throw new ApiError(t('errors', 'speechDown'), response.status);
+    }
+    const blob = await response.blob();
+    const head = new Uint8Array(await blob.slice(0, 3).arrayBuffer());
+    const mpeg = head[0] === 0xff && (head[1] & 0xe0) === 0xe0;
+    const id3 = head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33;
+    if (!mpeg && !id3) throw new ApiError(t('errors', 'speechDown'), response.status);
+    return blob;
   },
   watchSymbol: (symbol: string) =>
     request<{ watchlist: string[] }>('/market/watch', {
