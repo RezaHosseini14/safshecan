@@ -3,7 +3,7 @@
 @custom-variant light (&:where(.light, .light *));
 
 @theme inline {
-  --font-sans: var(--font-vazirmatn), "Vazirmatn", sans-serif;
+  --font-sans: var(--font-yekan-bakh), "Yekan Bakh", sans-serif;
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
   --color-background: #070b14;
   --color-foreground: #f8fafc;
@@ -91,4 +91,56 @@ html.light [class~="text-white/20"] {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
+}
+
+.glass-card {
+  background: rgba(13, 18, 30, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 16px 36px -12px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px) saturate(1.6);
+}
+
+:root {
+  --scrollbar-thumb: rgb(226 232 240 / 0.28);
+  --scrollbar-thumb-hover: rgb(52 211 153 / 0.92);
+}
+
+html.light {
+  --scrollbar-thumb: rgb(15 23 42 / 0.28);
+  --scrollbar-thumb-hover: rgb(5 150 105 / 0.85);
+}
+
+html,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }

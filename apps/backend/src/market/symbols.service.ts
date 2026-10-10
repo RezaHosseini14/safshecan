@@ -402,8 +402,8 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Search and filter symbols with rich criteria.
-   * Always capped — never dump the full ~3k market watch to the client.
+   * Search and filter symbols. Callers pass a small limit; the symbol picker
+   * asks for the full catalog and virtualizes it.
    */
   public search(
     query?: string,
@@ -451,7 +451,7 @@ export class SymbolsService implements OnModuleInit, OnModuleDestroy {
         return (b.value || 0) - (a.value || 0);
       });
 
-      const cap = Math.min(Math.max(Number(limit) || 150, 1), 500);
+      const cap = Math.min(Math.max(Number(limit) || 150, 1), 10_000);
       return list.slice(0, cap);
     } catch (err: unknown) {
       this.logger.error(

@@ -62,7 +62,7 @@ export function CommandPanel({
           )}
         </div>
         <div className="text-xs md:col-span-3 md:text-end">
-          <div className="num-mono text-[11px] text-slate-400">
+          <div className="text-[11px] text-slate-400">
             وضعیت کنونی: <span className="font-bold text-amber-400">{engineState}</span>
           </div>
         </div>

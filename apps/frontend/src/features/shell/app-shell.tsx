@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Zap } from 'lucide-react';
 import type { SniperState, TimeSyncStatus } from '@saf-shekan/core';
+import { Num } from '@/components/num';
 import { Button } from '@/components/ui/button';
 import { HeaderActions } from '@/features/shell/header-actions';
 import { isEngineHot } from '@/lib/engine-state';
@@ -37,6 +38,7 @@ export function AppShell({
   connected,
   onDisarm,
   footerNote,
+  footerAside = 'v2.0 Next.js Ultra HFT | High Precision hrtime & NTP Sync',
 }: {
   children: React.ReactNode;
   engineState: SniperState;
@@ -44,6 +46,7 @@ export function AppShell({
   connected: boolean;
   onDisarm: () => void;
   footerNote: string;
+  footerAside?: string;
 }) {
   const pathname = usePathname() || '/';
   const hot = isEngineHot(engineState);
@@ -65,7 +68,7 @@ export function AppShell({
                 />
               </span>
               <span className="text-[17px] font-black tracking-tight">صف‌شکن</span>
-              <span className="num-mono rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+              <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
                 HFT
               </span>
             </Link>
@@ -105,13 +108,25 @@ export function AppShell({
               </span>
               <span className="text-white/20">|</span>
               <span className="text-slate-500">PING:</span>
-              <span className={cn('num-mono font-bold', sample ? latencyClass(sample.rttMs) : 'text-slate-400')} dir="ltr">
-                {sample ? `${Math.round(sample.rttMs)}ms` : '—'}
+              <span className={cn('font-bold', sample ? latencyClass(sample.rttMs) : 'text-slate-400')} dir="ltr">
+                {sample ? (
+                  <>
+                    <Num>{Math.round(sample.rttMs)}</Num> ms
+                  </>
+                ) : (
+                  <Num>—</Num>
+                )}
               </span>
               <span className="text-white/20">|</span>
               <span className="text-slate-500">NTP Offset:</span>
-              <span className={cn('num-mono font-bold', sample ? 'text-cyan-400' : 'text-slate-400')} dir="ltr">
-                {sample ? formatSignedMs(sample.offsetMs) : '—'}
+              <span className={cn('font-bold', sample ? 'text-cyan-400' : 'text-slate-400')} dir="ltr">
+                {sample ? (
+                  <>
+                    <Num>{formatSignedMs(sample.offsetMs).replace(/ms$/, '')}</Num> ms
+                  </>
+                ) : (
+                  <Num>—</Num>
+                )}
               </span>
             </div>
             <HeaderActions />
@@ -128,7 +143,7 @@ export function AppShell({
         <div className="mx-auto flex max-w-[1720px] flex-col items-center justify-between gap-2 sm:flex-row">
           <span>{footerNote}</span>
           <span className="num-mono" dir="ltr">
-            v2.0 Next.js Ultra HFT | High Precision hrtime & NTP Sync
+            {footerAside}
           </span>
         </div>
       </footer>

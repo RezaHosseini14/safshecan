@@ -125,9 +125,22 @@ export interface SymbolItem {
   insCode?: string;
   market?: string;
   price?: number;
+  closingPrice?: number;
   yesterdayPrice?: number;
   high?: number;
   low?: number;
+  highPrice?: number;
+  lowPrice?: number;
+  /** سقف قیمت مجاز امروز، ریال */
+  pMax?: number;
+  /** کف قیمت مجاز امروز، ریال */
+  pMin?: number;
+  /** حجم مبنا */
+  baseVolume?: number;
+  volume?: number;
+  value?: number;
+  tradesCount?: number;
+  lastUpdated?: string;
 }
 
 export interface BrokerPreset {

@@ -88,7 +88,7 @@ export function TimingCard({
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
         <p>
           <span className="font-bold text-slate-200">فرمول شلیک:</span> سفارش اول در لحظه{' '}
-          <span className="num-mono text-cyan-400" dir="ltr">
+          <span className="text-cyan-400" dir="ltr">
             (TargetTime - LeadTime)
           </span>{' '}
           ارسال شده و شلیک‌های بعدی با فاصله مشخص‌شده تکرار می‌شوند.

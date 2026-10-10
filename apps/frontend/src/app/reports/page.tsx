@@ -22,7 +22,8 @@ export default function ReportsPage() {
       engineState={socket.engineState}
       timeSync={socket.timeSync}
       connected={socket.connected}
-      footerNote="صف‌شکن — کارنامه و آرشیو شلیک‌ها"
+      footerNote="صف‌شکن (SafShekan) - آرشیو معاملات و آمار میلی‌ثانیه‌ای"
+      footerAside="TSE High-Frequency Execution Logs"
       onDisarm={() => {
         void api.disarmSniper();
       }}

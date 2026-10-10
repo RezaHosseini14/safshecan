@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Wifi, Zap } from 'lucide-react';
+import { Num } from '@/components/num';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { isValidBrokerUrl } from '@/lib/security';
@@ -65,19 +66,19 @@ export function NetworkCard({ targetUrl }: { targetUrl: string }) {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Metric label="وضعیت TLS Handshake" value={warm ? 'Pre-Warmed' : '—'} />
         <Metric label="آدرس هدف" value={url ? 'https' : 'ذخیره‌شده روی سرور'} />
-        <Metric label="پینگ HTTP" value={pingMs != null ? `${pingMs} ms` : '—'} />
-        <Metric label="تاخیر مسیر (RTT)" value={rttMs != null ? `${rttMs} ms` : '—'} />
+        <Metric label="پینگ HTTP" value={pingMs != null ? <><Num>{pingMs}</Num> ms</> : '—'} />
+        <Metric label="تاخیر مسیر (RTT)" value={rttMs != null ? <><Num>{rttMs}</Num> ms</> : '—'} />
       </div>
       {message ? <p className="mt-3 text-[11px] text-slate-400">{message}</p> : null}
     </section>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-lg border border-white/6 bg-white/3 p-3 text-center">
       <span className="mb-1 block text-[11px] text-slate-400">{label}</span>
-      <span className="num-mono text-xs font-bold text-slate-200">{value}</span>
+      <span className="text-xs font-bold text-slate-200">{value}</span>
     </div>
   );
 }

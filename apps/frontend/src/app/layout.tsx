@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from 'next';
-import { JetBrains_Mono, Vazirmatn } from 'next/font/google';
+import { JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
-const vazirmatn = Vazirmatn({
-  subsets: ['arabic', 'latin'],
-  variable: '--font-vazirmatn',
+const yekanBakh = localFont({
+  src: '../../public/fonts/joys-yekan-bakh-vf.woff2',
+  variable: '--font-yekan-bakh',
   display: 'swap',
+  weight: '100 900',
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -33,7 +35,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html
       lang="fa"
       dir="rtl"
-      className={`${vazirmatn.variable} ${jetbrainsMono.variable}`}
+      className={`${yekanBakh.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-screen antialiased" suppressHydrationWarning>

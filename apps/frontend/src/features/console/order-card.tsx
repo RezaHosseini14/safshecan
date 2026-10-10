@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link2 } from 'lucide-react';
 import { calculateBuyFee } from '@saf-shekan/core';
 import type { BotConfig, SymbolItem } from '@saf-shekan/core';
+import { Num } from '@/components/num';
+import { SymbolPicker, sharePrice } from '@/components/symbol-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,7 +33,9 @@ export function OrderCard({
 }) {
   const [draftQuery, setDraftQuery] = useState<string | null>(null);
   const query = draftQuery ?? config.order.symbol;
-  const [symbols, setSymbols] = useState<SymbolItem[]>([]);
+  const [picked, setPicked] = useState<SymbolItem | null>(null);
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const quoteSeq = useRef(0);
   const order = config.order;
   const parsed = OrderConfigSchema.safeParse({
     symbol: order.symbol,
@@ -41,13 +45,35 @@ export function OrderCard({
     side: order.side,
   });
   const fee = parsed.success ? calculateBuyFee(order.price, order.quantity) : null;
+  const ceiling = picked?.pMax;
+  const shownPrice = livePrice ?? (picked ? sharePrice(picked) : null);
 
   useEffect(() => {
-    const handle = setTimeout(() => {
-      api.searchSymbols(query).then(setSymbols);
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [query]);
+    return () => {
+      quoteSeq.current = -1;
+    };
+  }, []);
+
+  const selectSymbol = (item: SymbolItem) => {
+    const seq = quoteSeq.current + 1;
+    quoteSeq.current = seq;
+    setDraftQuery(item.symbol);
+    setPicked(item);
+    setLivePrice(null);
+    const catalogPrice = sharePrice(item);
+    onChange({
+      symbol: item.symbol,
+      isin: item.isin,
+      ...(catalogPrice != null ? { price: catalogPrice } : {}),
+    });
+    api.getMarketQuote(item.symbol).then((quote) => {
+      if (quoteSeq.current !== seq) return;
+      if (quote?.lastPrice != null && quote.lastPrice > 0) {
+        setLivePrice(quote.lastPrice);
+        onChange({ price: quote.lastPrice });
+      }
+    });
+  };
 
   return (
     <article className="flex flex-col justify-between rounded-xl border border-white/10 bg-[#0f131c]/90 p-6 backdrop-blur-md">
@@ -62,7 +88,9 @@ export function OrderCard({
               <p className="mt-0.5 text-[11px] text-slate-400">تنظیم نماد هدف، قیمت، حجم و سامانه معاملاتی</p>
             </div>
           </div>
-          <Badge className="num-mono">{order.isin ? `ISIN: ${order.isin}` : 'ISIN: —'}</Badge>
+          <Badge>
+            ISIN: <Num>{order.isin || '—'}</Num>
+          </Badge>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -86,36 +114,34 @@ export function OrderCard({
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="mb-2 block">نماد بورسی هدف</Label>
-            <Input
-              value={query}
-              onChange={(event) => {
-                setDraftQuery(event.target.value);
-                onChange({ symbol: event.target.value.trim() });
-              }}
-            />
-            {symbols.length > 0 ? (
-              <div className="mt-1 max-h-28 overflow-auto rounded-lg border border-white/10 bg-[#141924]">
-                {symbols.slice(0, 6).map((item) => (
-                  <Button
-                    key={item.isin || item.symbol}
-                    type="button"
-                    variant="ghost"
-                    className="h-8 w-full justify-start rounded-none"
-                    onClick={() => {
-                      setDraftQuery(item.symbol);
-                      onChange({ symbol: item.symbol, isin: item.isin });
-                      setSymbols([]);
-                    }}
-                  >
-                    {item.symbol} — {item.name}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <SymbolPicker
+            label="نماد بورسی هدف"
+            value={query}
+            onQueryChange={(next) => {
+              setDraftQuery(next);
+              onChange({ symbol: next.trim() });
+              if (picked && next.trim() !== picked.symbol) {
+                setPicked(null);
+                setLivePrice(null);
+              }
+            }}
+            onSelect={selectSymbol}
+          />
         </div>
+        {picked ? (
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-[#141924] p-3 text-[11px] md:grid-cols-5">
+            <SymbolFact label="آخرین قیمت" value={shownPrice} unit="ریال" toman={shownPrice} />
+            <SymbolFact label="سقف مجاز" value={ceiling != null && ceiling > 0 ? ceiling : null} unit="ریال" />
+            <SymbolFact label="کف مجاز" value={picked.pMin != null && picked.pMin > 0 ? picked.pMin : null} unit="ریال" />
+            <SymbolFact label="حجم معاملات" value={picked.volume ?? null} unit="سهم" />
+            <SymbolFact
+              label="حجم مبنا"
+              value={picked.baseVolume != null && Number.isFinite(picked.baseVolume) ? picked.baseVolume : null}
+              unit="سهم"
+              empty="حجم مبنا در دیده‌بان نیست"
+            />
+          </div>
+        ) : null}
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-2">
           <div>
             <div className="mb-2 flex items-center justify-between">
@@ -123,7 +149,7 @@ export function OrderCard({
               <div className="flex gap-1">
                 {[5000, 1000, 500].map((qty) => (
                   <Button key={qty} type="button" variant="chip" onClick={() => onChange({ quantity: qty })}>
-                    {formatNumber(qty)}
+                    <Num>{formatNumber(qty)}</Num>
                   </Button>
                 ))}
               </div>
@@ -139,6 +165,11 @@ export function OrderCard({
           <div>
             <div className="mb-2 flex items-center justify-between">
               <Label>قیمت هر سهم (ریال)</Label>
+              {ceiling != null && ceiling > 0 ? (
+                <Button type="button" variant="chip" onClick={() => onChange({ price: ceiling })}>
+                  اعمال سقف مجاز
+                </Button>
+              ) : null}
             </div>
             <div className="flex h-10 overflow-hidden rounded-lg border border-white/10 bg-[#141924]">
               <Button type="button" variant="ghost" className="h-full w-9 rounded-none" onClick={() => onChange({ price: Math.max(1, order.price - 1) })}>
@@ -163,14 +194,47 @@ export function OrderCard({
           <span className="block text-xs font-bold">ارزش کل سفارش</span>
           <span className="text-[10px] text-slate-400">شامل کارمزد تخمینی بورس تهران</span>
         </div>
-        <div className="num-mono text-left" dir="ltr">
-          <span className="text-base font-black text-emerald-400">{fee ? formatNumber(fee.netValue) : '—'}</span>
+        <div className="text-left" dir="ltr">
+          <Num className="text-base font-black text-emerald-400">{fee ? formatNumber(fee.netValue) : '—'}</Num>
           <span className="ms-2 text-[11px] text-slate-400">ریال</span>
-          <span className="ms-2 text-[11px] text-slate-500">
-            {fee ? `(${formatNumber(tomanFromRial(fee.netValue))} تومان)` : ''}
-          </span>
+          {fee ? (
+            <span className="ms-2 text-[11px] text-slate-500">
+              (<Num>{formatNumber(tomanFromRial(fee.netValue))}</Num> تومان)
+            </span>
+          ) : null}
         </div>
       </div>
     </article>
+  );
+}
+
+function SymbolFact({
+  label,
+  value,
+  unit,
+  toman,
+  empty = '—',
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  toman?: number | null;
+  empty?: string;
+}) {
+  return (
+    <div>
+      <span className="block text-slate-400">{label}</span>
+      {value != null ? (
+        <Num className="font-bold text-slate-100">{formatNumber(value)}</Num>
+      ) : (
+        <span className="text-slate-100">{empty}</span>
+      )}
+      {value != null ? <span className="ms-1 text-slate-500">{unit}</span> : null}
+      {toman != null ? (
+        <span className="ms-1 text-slate-500">
+          (<Num>{formatNumber(tomanFromRial(toman))}</Num> تومان)
+        </span>
+      ) : null}
+    </div>
   );
 }

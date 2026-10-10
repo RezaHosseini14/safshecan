@@ -2,6 +2,7 @@
 
 import { RefreshCw, SlidersHorizontal, Timer } from 'lucide-react';
 import type { TimeSyncStatus } from '@saf-shekan/core';
+import { Num } from '@/components/num';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -43,7 +44,7 @@ export function AtomicClocks({
               <p className="text-[11px] text-slate-400">کالیبره شده با سرور مرجع زمانی</p>
             </div>
           </div>
-          <Badge variant="emerald" className="num-mono">
+          <Badge variant="emerald">
             {timeSync?.synchronized ? timeSync.source || 'NTP' : 'در انتظار همگام‌سازی'}
           </Badge>
         </div>
@@ -58,10 +59,24 @@ export function AtomicClocks({
             <RefreshCw className="h-3.5 w-3.5" />
             همگام‌سازی فوری
           </Button>
-          <div className="num-mono text-[11px] text-slate-400" dir="ltr">
-            OFFSET: <span className="font-bold text-cyan-400">{timeSync ? formatSignedMs(timeSync.offsetMs) : '—'}</span>
+          <div className="text-[11px] text-slate-400" dir="ltr">
+            OFFSET:{' '}
+            {timeSync ? (
+              <>
+                <Num className="font-bold text-cyan-400">{formatSignedMs(timeSync.offsetMs).replace(/ms$/, '')}</Num> ms
+              </>
+            ) : (
+              <Num className="font-bold text-cyan-400">—</Num>
+            )}
             <span className="mx-3">
-              RTT: <span className="font-bold text-emerald-400">{timeSync ? `${Math.round(timeSync.rttMs)}ms` : '—'}</span>
+              RTT:{' '}
+              {timeSync ? (
+                <>
+                  <Num className="font-bold text-emerald-400">{Math.round(timeSync.rttMs)}</Num> ms
+                </>
+              ) : (
+                <Num className="font-bold text-emerald-400">—</Num>
+              )}
             </span>
           </div>
         </div>
@@ -77,8 +92,8 @@ export function AtomicClocks({
               <p className="text-[11px] text-slate-400">زمان دقیق ارسال سفارش سرخطی</p>
             </div>
           </div>
-          <Badge variant="cyan" className="num-mono">
-            TARGET: {targetTime || '—'}
+          <Badge variant="cyan">
+            TARGET: <Num>{targetTime || '—'}</Num>
           </Badge>
         </div>
         <div className="py-4 text-center">
@@ -91,13 +106,13 @@ export function AtomicClocks({
           <div className="flex items-center gap-1">
             <span className="text-[11px] text-slate-400">آفست دستی:</span>
             {[-5, -1, 1, 5].map((delta) => (
-              <Button key={delta} type="button" variant="outline" size="sm" className="num-mono h-7 px-2" onClick={() => onNudgeOffset(delta)}>
-                {delta > 0 ? `+${delta}` : delta}ms
+              <Button key={delta} type="button" variant="outline" size="sm" className="h-7 px-2" onClick={() => onNudgeOffset(delta)}>
+                <Num>{delta > 0 ? `+${delta}` : delta}</Num>ms
               </Button>
             ))}
           </div>
-          <div className="num-mono text-[11px] text-slate-400" dir="ltr">
-            LEAD-TIME: <span className="font-bold text-cyan-400">{leadTimeMs}ms</span>
+          <div className="text-[11px] text-slate-400" dir="ltr">
+            LEAD-TIME: <Num className="font-bold text-cyan-400">{leadTimeMs}</Num> ms
           </div>
         </div>
       </Card>

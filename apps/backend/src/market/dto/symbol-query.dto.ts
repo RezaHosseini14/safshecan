@@ -20,7 +20,7 @@ export class SymbolQueryDto {
 
   @ApiPropertyOptional({
     example: 150,
-    description: 'حداکثر تعداد نتایج (پیش‌فرض ۱۵۰، سقف ۵۰۰)',
+    description: 'حداکثر تعداد نتایج (پیش‌فرض ۱۵۰، سقف ۱۰۰۰۰)',
   })
   @IsOptional()
   @Type(() => Number)

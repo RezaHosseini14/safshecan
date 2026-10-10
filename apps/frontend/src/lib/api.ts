@@ -20,8 +20,12 @@ export interface OrderBookLevel {
 export interface ClientFlow {
   buyIndividualVolume: number;
   buyLegalVolume: number;
+  buyIndividualCount: number;
+  buyLegalCount: number;
   sellIndividualVolume: number;
   sellLegalVolume: number;
+  sellIndividualCount: number;
+  sellLegalCount: number;
 }
 
 export interface LiveQuote {
@@ -31,16 +35,25 @@ export interface LiveQuote {
   symbol: string;
   name: string;
   isin: string;
+  insCode: string;
   lastPrice: number;
   closingPrice: number;
   yesterdayPrice: number;
+  change: number;
   changePercent: number;
+  openPrice: number;
+  highPrice: number;
+  lowPrice: number;
+  pMax?: number;
+  pMin?: number;
   volume: number;
   value: number;
   tradesCount: number;
   stateTitle?: string;
+  underSupervision?: number;
   orderBook: OrderBookLevel[];
   clientFlow: ClientFlow | null;
+  fetchedAt: string;
   source: 'TSETMC' | 'CACHE' | 'EMPTY';
 }
 
@@ -133,8 +146,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(url ? { url } : {}),
     }),
-  searchSymbols: async (query: string): Promise<SymbolItem[]> => {
-    const params = new URLSearchParams({ limit: '40' });
+  searchSymbols: async (query: string, limit = 80): Promise<SymbolItem[]> => {
+    const params = new URLSearchParams({ limit: String(limit) });
     if (query) params.set('q', query);
     try {
       const data = await request<SymbolItem[]>(`/symbols?${params.toString()}`);
