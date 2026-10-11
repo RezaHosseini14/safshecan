@@ -233,9 +233,10 @@ export const api = {
       return null;
     }
   },
-  getMarketDossier: async (symbol: string): Promise<MarketDossier | null> => {
+  getMarketDossier: async (symbol: string, force = false): Promise<MarketDossier | null> => {
     try {
-      return await request<MarketDossier>(`/market/dossier?symbol=${encodeURIComponent(symbol)}`);
+      const query = force ? `&force=1` : '';
+      return await request<MarketDossier>(`/market/dossier?symbol=${encodeURIComponent(symbol)}${query}`);
     } catch {
       return null;
     }

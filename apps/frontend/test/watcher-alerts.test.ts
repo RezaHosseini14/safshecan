@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveQuote } from '@/lib/api';
 import { matchesFilter } from '@/features/watcher/watcher-metrics';
-import { alertEdges, type AlertSnapshot } from '@/features/watcher/watcher-alerts';
+import { alertEdges, loadArmedSymbols, saveArmedSymbols, type AlertSnapshot } from '@/features/watcher/watcher-alerts';
 
 function quote(partial: Partial<LiveQuote> = {}): LiveQuote {
   return {
@@ -80,3 +80,12 @@ describe('alert edges', () => {
     expect(alertEdges(hot, { ...hot, power: 3.4 })).toEqual([]);
   });
 });
+
+describe('armed symbols persistence', () => {
+  it('saves and loads armed symbols from localStorage', () => {
+    const symbols = ['TST1', 'TST2'];
+    saveArmedSymbols(symbols);
+    expect(loadArmedSymbols()).toEqual(symbols);
+  });
+});
+

@@ -108,5 +108,19 @@
   "buyerRatioLabel": "نسبت خرید حقیقی به فروش حقیقی",
   "watchTitleOpen": "دیده‌بان بازار (",
   "watchTitleClose": "نماد)",
-  "ceilingLineLead": "سقف مجاز:"
+  "ceilingLineLead": "سقف مجاز:",
+  "clearFilter": "حذف فیلتر",
+  "clearAlerts": "پاک‌سازی رویدادها",
+  "armActive": "فعال‌سازی هشدار {symbol}",
+  "disarmActive": "غیرفعال‌سازی هشدار {symbol}",
+  "unarmSymbol": "لغو هشدار {symbol}",
+  "sendToConsole": "ارسال به سرخطی",
+  "quickOrder": "سرخطی",
+  "refreshData": "به‌روزرسانی",
+  "fitChart": "بازنشانی نما",
+  "refreshChart": "بارگذاری مجدد نمودار",
+  "colRsi": "شاخص RSI",
+  "testAlert": "تست اعلان",
+  "testAlertSent": "اعلان آزمایشی صادر شد",
+  "watchingActive": "در دیده‌بان"
 }

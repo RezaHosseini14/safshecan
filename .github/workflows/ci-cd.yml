@@ -200,9 +200,16 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+          cat <<'EOF' > ~/.ssh/config
+          Host *
+            ServerAliveInterval 15
+            ServerAliveCountMax 20
+            TCPKeepAlive yes
+            ConnectTimeout 30
+            StrictHostKeyChecking accept-new
+          EOF
           ssh-keyscan -H -T 20 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || {
-            echo "WARN: ssh-keyscan failed; allowing first connect with StrictHostKeyChecking=accept-new"
-            echo "StrictHostKeyChecking accept-new" >> ~/.ssh/config
+            echo "WARN: ssh-keyscan failed; host key will be verified via accept-new"
           }
           chmod 600 ~/.ssh/known_hosts ~/.ssh/config 2>/dev/null || true
 
@@ -221,7 +228,7 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
-          ssh "$SSH_USER@$SSH_HOST" \
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 "$SSH_USER@$SSH_HOST" \
             BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
             GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
             bash -s <<'EOF'
@@ -280,7 +287,12 @@ jobs:
           if ! docker compose up -d --remove-orphans --wait --wait-timeout 180; then
             echo "::error::docker compose up failed"
             docker compose ps || true
-            docker logs saf-shekan-nginx --tail 80 || true
+            echo "=== SafShekan Backend Logs ==="
+            docker logs saf-shekan-backend --tail 100 || true
+            echo "=== SafShekan Frontend Logs ==="
+            docker logs saf-shekan-frontend --tail 100 || true
+            echo "=== SafShekan Nginx Logs ==="
+            docker logs saf-shekan-nginx --tail 100 || true
             exit 1
           fi
 

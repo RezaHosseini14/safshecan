@@ -57,7 +57,19 @@ export function ConsoleDesk({ socket }: { socket: SocketState }) {
     api
       .getStatus()
       .then((res) => {
-        if (res.config) setConfig(res.config);
+        let nextConfig = res.config;
+        const urlSymbol = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('symbol') : null;
+        if (urlSymbol && urlSymbol.trim()) {
+          const sym = urlSymbol.trim();
+          nextConfig = {
+            ...(nextConfig ?? EMPTY_CONFIG),
+            order: {
+              ...(nextConfig?.order ?? EMPTY_CONFIG.order),
+              symbol: sym,
+            },
+          };
+        }
+        if (nextConfig) setConfig(nextConfig);
         if (res.state) setEngineState(res.state);
         if (res.timeSync) applyHttpTimeSync(res.timeSync);
       })

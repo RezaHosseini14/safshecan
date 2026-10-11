@@ -1,7 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { t } from '@saf-shekan/i18n';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import { SymbolsService, SymbolItem } from './symbols.service.js';
 import {
   TsetmcClient,

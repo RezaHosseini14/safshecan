@@ -1,17 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { SymbolItem } from '@saf-shekan/core';
 import { t as catalog } from '@saf-shekan/i18n';
 import {
+  ArrowDown,
   ArrowLeftRight,
+  ArrowUp,
+  ArrowUpDown,
   Bell,
+  BellRing,
   CheckCircle2,
   CircleDashed,
   BarChart3,
   List,
+  Loader2,
   PieChart,
+  RefreshCw,
   Rocket,
   Sparkles,
   Star,
@@ -20,6 +27,7 @@ import {
   Volume2,
   Square,
   Wallet,
+  X,
   Zap,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -62,7 +70,7 @@ const SELECTED_DOSSIER_MS = 15_000;
 const REST_DOSSIER_MS = 45_000;
 
 type DossierPhase = 'loading' | 'ready' | 'error';
-type SortKey = 'last' | 'change' | 'power' | 'flow';
+type SortKey = 'last' | 'change' | 'power' | 'flow' | 'rsi';
 
 interface DeskAlert {
   id: string;
@@ -104,6 +112,7 @@ const FILTERS: {
 const SEARCH_ID = 'ticker-search-input';
 
 export function WatcherDesk({ quotesBySymbol }: { quotesBySymbol: Record<string, LiveQuote> }) {
+  const router = useRouter();
   const t = useTranslations('watcher');
   const td = useTranslations('dossier');
   const tc = useTranslations('common');
@@ -116,12 +125,38 @@ export function WatcherDesk({ quotesBySymbol }: { quotesBySymbol: Record<string,
   const [filter, setFilter] = useState<WatcherFilter | null>(null);
   const [armed, setArmed] = useState<string[]>(() => loadArmedSymbols());
   const [alertEvents, setAlertEvents] = useState<DeskAlert[]>([]);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [watchPending, setWatchPending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deletingSymbols, setDeletingSymbols] = useState<Set<string>>(new Set());
   const [summaryLarge, setSummaryLarge] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dossiers, setDossiers] = useState<Record<string, MarketDossier>>({});
   const [dossierPhase, setDossierPhase] = useState<Record<string, DossierPhase>>({});
   const headRef = useRef<HTMLElement>(null);
   const alertSnapshots = useRef<Record<string, AlertSnapshot>>({});
+
+  const refreshDesk = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const status = await api.getMarketStatus();
+      setWatchlist(status.watchlist);
+      setError(status.lastError);
+      if (selected) {
+        const [q, d] = await Promise.all([
+          api.getMarketQuote(selected),
+          api.getMarketDossier(selected, true),
+        ]);
+        if (q) setLocalQuotes((prev) => ({ ...prev, [selected]: q }));
+        if (d) setDossiers((prev) => ({ ...prev, [selected]: d }));
+      }
+    } catch {
+      setError(t('statusUnread'));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -385,52 +420,115 @@ export function WatcherDesk({ quotesBySymbol }: { quotesBySymbol: Record<string,
                 </div>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2.5 self-start md:self-auto">
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5 self-start md:self-auto">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9 px-2 text-slate-400 hover:text-white"
+                title={t('refreshData')}
+                aria-label={t('refreshData')}
+                disabled={refreshing}
+                onClick={refreshDesk}
+              >
+                <RefreshCw className={cn('h-4 w-4', refreshing ? 'animate-spin text-[#4edea3]' : undefined)} />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 border-[#4edea3]/30 bg-[#4edea3]/10 px-3.5 font-bold text-[#4edea3] hover:bg-[#4edea3]/20"
+                disabled={!selected}
+                title={t('sendToConsole')}
+                onClick={() => {
+                  if (selected) router.push(`/?symbol=${encodeURIComponent(selected)}`);
+                }}
+              >
+                <Rocket className="h-4 w-4 text-[#4edea3]" />
+                {t('sendToConsole')}
+              </Button>
               <Button
                 type="button"
                 size="sm"
-                className="h-9 bg-[#4edea3] px-4 text-[#002b1b] shadow-[0_0_15px_rgba(78,222,163,0.3)] hover:bg-[#6ffbbe]"
-                disabled={!watchSymbol}
+                disabled={!watchSymbol || watchPending}
+                className={cn(
+                  'h-9 px-3.5 gap-1.5 transition-colors',
+                  watching
+                    ? 'border border-[#ffb95f]/30 bg-[#ffb95f]/10 font-bold text-[#ffb95f] hover:border-rose-500/30 hover:bg-rose-500/15 hover:text-rose-300'
+                    : 'bg-[#4edea3] text-[#002b1b] shadow-[0_0_15px_rgba(78,222,163,0.3)] hover:bg-[#6ffbbe]'
+                )}
                 onClick={() => {
-                  if (!watchSymbol) return;
+                  if (!watchSymbol || watchPending) return;
+                  setWatchPending(true);
                   const request = watching ? api.unwatchSymbol(watchSymbol) : api.watchSymbol(watchSymbol);
-                  void request.then((res) => {
-                    setWatchlist(res.watchlist);
-                    if (!watching) {
-                      setSelected(watchSymbol);
-                      return;
-                    }
-                    if (selected === watchSymbol) setSelected(res.watchlist[0] ?? '');
-                  }).catch(() => setError(t('statusUnread')));
+                  void request
+                    .then((res) => {
+                      setWatchlist(res.watchlist);
+                      if (!watching) {
+                        setSelected(watchSymbol);
+                        return;
+                      }
+                      if (selected === watchSymbol) setSelected(res.watchlist[0] ?? '');
+                    })
+                    .catch(() => setError(t('statusUnread')))
+                    .finally(() => setWatchPending(false));
                 }}
               >
-                <Star className={cn('h-4 w-4', watching ? 'fill-current' : undefined)} />
+                {watchPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Star className={cn('h-4 w-4', watching ? 'fill-current' : undefined)} />
+                )}
                 {watching ? t('removeWatch') : t('addWatch')}
               </Button>
-              <Popover>
+              <Popover open={alertOpen} onOpenChange={setAlertOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className={cn('h-9 px-4', alertOn ? 'border-[#ffb95f]/40 text-[#ffb95f]' : undefined)}
+                    className={cn(
+                      'relative h-9 gap-1.5 px-3.5',
+                      alertOn ? 'border-[#ffb95f]/40 bg-[#ffb95f]/10 text-[#ffb95f]' : undefined
+                    )}
                     aria-pressed={alertOn}
                     disabled={!selected}
-                    onClick={() => {
-                      if (!selected) return;
-                      const enabling = !armed.includes(selected);
-                      if (enabling) requestAlertPermission();
-                      setArmed((current) =>
-                        enabling ? [...current, selected] : current.filter((item) => item !== selected),
-                      );
-                    }}
                   >
                     <Bell className={cn('h-4 w-4 text-[#ffb95f]', alertOn ? 'fill-current' : undefined)} />
                     {t('smartAlert')}
+                    {armed.length > 0 ? (
+                      <span className="ms-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#ffb95f]/20 px-1 text-[10px] font-bold text-[#ffb95f]">
+                        <Num>{armed.length}</Num>
+                      </span>
+                    ) : null}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 p-3">
-                  <AlertFeed armed={armed} events={alertEvents} />
+                <PopoverContent align="end" className="w-84 p-3.5">
+                  <AlertFeed
+                    selected={selected}
+                    armed={armed}
+                    events={alertEvents}
+                    onToggleArm={(sym) => {
+                      const enabling = !armed.includes(sym);
+                      if (enabling) requestAlertPermission();
+                      setArmed((current) =>
+                        enabling ? [...current, sym] : current.filter((item) => item !== sym)
+                      );
+                    }}
+                    onUnarm={(sym) => {
+                      setArmed((current) => current.filter((item) => item !== sym));
+                    }}
+                    onClearEvents={() => setAlertEvents([])}
+                    onTestAlert={() => {
+                      requestAlertPermission();
+                      postBrowserAlert(t('smartAlert'), t('testAlertSent'));
+                    }}
+                    onSelectSymbol={(sym) => {
+                      setSelected(sym);
+                      setAlertOpen(false);
+                      headRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                  />
                 </PopoverContent>
               </Popover>
             </div>
@@ -502,6 +600,13 @@ export function WatcherDesk({ quotesBySymbol }: { quotesBySymbol: Record<string,
             candles={dossier?.candles ?? null}
             vwap={dossier?.indicators.vwap ?? null}
             largestTrade={dossier?.largestTrade ?? null}
+            onReload={() => {
+              if (selected) {
+                void api.getMarketDossier(selected, true).then((d) => {
+                  if (d) setDossiers((prev) => ({ ...prev, [selected]: d }));
+                });
+              }
+            }}
           />
         </div>
         <div className="xl:col-span-4">
@@ -552,15 +657,32 @@ export function WatcherDesk({ quotesBySymbol }: { quotesBySymbol: Record<string,
         rsiFor={(symbol) => dossiers[symbol]?.indicators.rsi14 ?? null}
         phaseFor={(symbol) => dossierPhase[symbol] ?? null}
         metaBySymbol={metaBySymbol}
+        deletingSymbols={deletingSymbols}
         onSelect={(symbol) => {
           setSelected(symbol);
           headRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }}
+        onSniper={(symbol) => {
+          router.push(`/?symbol=${encodeURIComponent(symbol)}`);
+        }}
+        onClearFilter={() => setFilter(null)}
         onRemove={(symbol) => {
-          void api.unwatchSymbol(symbol).then((res) => {
-            setWatchlist(res.watchlist);
-            if (selected === symbol) setSelected(res.watchlist[0] ?? '');
-          }).catch(() => setError(t('statusUnread')));
+          if (deletingSymbols.has(symbol)) return;
+          setDeletingSymbols((prev) => new Set(prev).add(symbol));
+          api
+            .unwatchSymbol(symbol)
+            .then((res) => {
+              setWatchlist(res.watchlist);
+              if (selected === symbol) setSelected(res.watchlist[0] ?? '');
+            })
+            .catch(() => setError(t('statusUnread')))
+            .finally(() => {
+              setDeletingSymbols((prev) => {
+                const next = new Set(prev);
+                next.delete(symbol);
+                return next;
+              });
+            });
         }}
       />
     </div>
@@ -968,8 +1090,9 @@ function SummaryCard({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8"
+            className="h-8 gap-1.5"
             aria-pressed={speaking}
+            disabled={!summary || summary === td('noServerData')}
             onClick={() => {
               if (speechIsActive()) {
                 stopSpokenSummary();
@@ -980,18 +1103,31 @@ function SummaryCard({
               void onSpeak().then((note) => setSpeechNote(note));
             }}
           >
-            {speaking ? <Square className="h-3.5 w-3.5 fill-current text-rose-300" /> : <Volume2 className="h-4 w-4 text-[#38bdf8]" />}
+            {speechPhase === 'loading' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#38bdf8]" />
+            ) : speaking ? (
+              <Square className="h-3.5 w-3.5 fill-current text-rose-300" />
+            ) : (
+              <Volume2 className="h-4 w-4 text-[#38bdf8]" />
+            )}
             {speaking ? t('voiceStop') : t('voice')}
           </Button>
           <div className="flex items-center rounded-lg border border-white/8 bg-black/40 p-0.5">
-            <Button type="button" variant="ghost" size="sm" className="h-7 px-2.5" aria-pressed={!large} onClick={() => large && onToggleSize()}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn('h-7 px-2.5 transition-colors', !large ? 'bg-white/10 font-bold text-[#4edea3]' : 'text-slate-400')}
+              aria-pressed={!large}
+              onClick={() => large && onToggleSize()}
+            >
               A
             </Button>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className={cn('h-7 px-2.5', large ? 'font-bold text-[#4edea3]' : undefined)}
+              className={cn('h-7 px-2.5 transition-colors', large ? 'bg-white/10 font-bold text-[#4edea3]' : 'text-slate-400')}
               aria-pressed={large}
               onClick={() => !large && onToggleSize()}
             >
@@ -1040,7 +1176,10 @@ function WatchlistTable({
   rsiFor,
   phaseFor,
   metaBySymbol,
+  deletingSymbols,
   onSelect,
+  onSniper,
+  onClearFilter,
   onRemove,
 }: {
   symbols: string[];
@@ -1052,13 +1191,16 @@ function WatchlistTable({
   rsiFor: (symbol: string) => number | null;
   phaseFor: (symbol: string) => DossierPhase | null;
   metaBySymbol: Record<string, SymbolItem>;
+  deletingSymbols: ReadonlySet<string>;
   onSelect: (symbol: string) => void;
+  onSniper: (symbol: string) => void;
+  onClearFilter: () => void;
   onRemove: (symbol: string) => void;
 }) {
   const t = useTranslations('watcher');
   const tc = useTranslations('common');
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
-  const ordered = sortRows(symbols, sort, quoteFor);
+  const ordered = sortRows(symbols, sort, quoteFor, rsiFor);
   return (
     <section className="glass-card flex flex-col gap-3.5 rounded-xl p-5">
       <div className="flex flex-col justify-between gap-3 border-b border-white/6 pb-3.5 sm:flex-row sm:items-center">
@@ -1080,7 +1222,7 @@ function WatchlistTable({
         <TableHeader>
           <TableRow className="border-white/6 text-center text-[11px] text-slate-500 hover:bg-transparent">
             <TableHead className="px-4 py-3.5 text-right whitespace-nowrap">{t('colSymbol')}</TableHead>
-            <TableHead className="px-3 text-center whitespace-nowrap">RSI</TableHead>
+            <SortHead label={t('colRsi')} sortKey="rsi" sort={sort} onSort={() => setSort((current) => nextSort(current, 'rsi'))} />
             <SortHead label={t('colLast')} sortKey="last" sort={sort} onSort={() => setSort((current) => nextSort(current, 'last'))} />
             <SortHead label={t('colChange')} sortKey="change" sort={sort} onSort={() => setSort((current) => nextSort(current, 'change'))} />
             <SortHead label={t('colPower')} sortKey="power" sort={sort} onSort={() => setSort((current) => nextSort(current, 'power'))} />
@@ -1093,13 +1235,26 @@ function WatchlistTable({
           {emptyBecause ? (
             <TableRow>
               <TableCell colSpan={8} className="py-6 text-center text-slate-400">
-                {emptyBecause === 'empty'
-                  ? t('emptyList')
-                  : emptyBecause === 'loading'
-                    ? t('filterPending')
-                  : emptyBecause === 'block'
-                    ? t('emptyBlock')
-                    : t('emptyFilter')}
+                <p>
+                  {emptyBecause === 'empty'
+                    ? t('emptyList')
+                    : emptyBecause === 'loading'
+                      ? t('filterPending')
+                    : emptyBecause === 'block'
+                      ? t('emptyBlock')
+                      : t('emptyFilter')}
+                </p>
+                {emptyBecause === 'filter' || emptyBecause === 'block' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2.5 h-7 px-3 text-xs border-white/10 hover:bg-white/5"
+                    onClick={onClearFilter}
+                  >
+                    {t('clearFilter')}
+                  </Button>
+                ) : null}
               </TableCell>
             </TableRow>
           ) : null}
@@ -1181,14 +1336,33 @@ function WatchlistTable({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-8 px-2 text-rose-300"
+                      className="h-8 px-2 text-[#4edea3] hover:bg-[#4edea3]/10"
+                      title={t('sendToConsole')}
+                      aria-label={t('sendToConsole')}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSniper(symbol);
+                      }}
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-rose-300 hover:bg-rose-500/10"
                       aria-label={t('removeWatch')}
+                      disabled={deletingSymbols.has(symbol)}
                       onClick={(event) => {
                         event.stopPropagation();
                         onRemove(symbol);
                       }}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {deletingSymbols.has(symbol) ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
                     </Button>
                   </div>
                 </TableCell>
@@ -1201,37 +1375,143 @@ function WatchlistTable({
   );
 }
 
-function AlertFeed({ armed, events }: { armed: string[]; events: DeskAlert[] }) {
+function AlertFeed({
+  selected,
+  armed,
+  events,
+  onToggleArm,
+  onUnarm,
+  onClearEvents,
+  onTestAlert,
+  onSelectSymbol,
+}: {
+  selected: string;
+  armed: string[];
+  events: DeskAlert[];
+  onToggleArm: (symbol: string) => void;
+  onUnarm: (symbol: string) => void;
+  onClearEvents: () => void;
+  onTestAlert: () => void;
+  onSelectSymbol: (symbol: string) => void;
+}) {
   const t = useTranslations('watcher');
   const tc = useTranslations('common');
   return (
     <div className="space-y-3 text-right">
-      <p className="text-xs font-bold text-white">{t('alertFeed')}</p>
+      <div className="flex items-center justify-between border-b border-white/6 pb-2">
+        <p className="text-xs font-bold text-white">{t('alertFeed')}</p>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-1.5 text-[10px] text-slate-400 hover:text-white"
+            onClick={onTestAlert}
+            title={t('testAlert')}
+          >
+            <BellRing className="h-3 w-3 text-[#ffb95f]" />
+            {t('testAlert')}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-1.5 text-[10px] text-rose-300 hover:bg-rose-500/10"
+            disabled={events.length === 0}
+            onClick={onClearEvents}
+            title={t('clearAlerts')}
+          >
+            <Trash2 className="h-3 w-3" />
+            {t('clearAlerts')}
+          </Button>
+        </div>
+      </div>
+
+      {selected ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-white/6 bg-black/40 p-2">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-extrabold text-white">{selected}</span>
+            <span className="text-[10px] text-slate-500">
+              ({armed.includes(selected) ? t('watchingActive') : tc('dash')})
+            </span>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant={armed.includes(selected) ? 'outline' : 'default'}
+            className={cn(
+              'h-7 px-2.5 text-xs font-bold transition-colors',
+              armed.includes(selected)
+                ? 'border-[#ffb95f]/40 bg-[#ffb95f]/10 text-[#ffb95f] hover:border-rose-500/30 hover:bg-rose-500/15 hover:text-rose-300'
+                : 'bg-[#4edea3] text-[#002b1b] hover:bg-[#6ffbbe]'
+            )}
+            onClick={() => onToggleArm(selected)}
+          >
+            <Bell className={cn('me-1 h-3 w-3', armed.includes(selected) ? 'fill-current' : undefined)} />
+            {armed.includes(selected)
+              ? t('disarmActive', { symbol: selected })
+              : t('armActive', { symbol: selected })}
+          </Button>
+        </div>
+      ) : null}
+
       <div>
         <p className="text-[11px] text-slate-500">{t('alertArmed')}</p>
         {armed.length === 0 ? (
           <p className="mt-1 text-[11px] text-slate-500">{tc('dash')}</p>
         ) : (
-          <ul className="mt-1 space-y-1">
+          <div className="mt-1 flex flex-wrap gap-1">
             {armed.map((symbol) => (
-              <li key={symbol} className="text-xs text-[#ffb95f]">{symbol}</li>
+              <span
+                key={symbol}
+                className="inline-flex items-center gap-1 rounded border border-[#ffb95f]/30 bg-[#ffb95f]/10 px-1.5 py-0.5 text-xs text-[#ffb95f]"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 text-xs font-bold text-[#ffb95f] hover:underline hover:bg-transparent"
+                  onClick={() => onSelectSymbol(symbol)}
+                >
+                  {symbol}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={t('unarmSymbol', { symbol })}
+                  className="h-4 w-4 p-0 text-slate-400 hover:text-rose-300 hover:bg-transparent"
+                  onClick={() => onUnarm(symbol)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </span>
             ))}
-          </ul>
+          </div>
         )}
       </div>
+
       {events.length === 0 ? (
         <p className="text-[11px] text-slate-500">{t('alertEmpty')}</p>
       ) : (
         <ul className="max-h-48 space-y-1.5 overflow-y-auto">
           {events.map((event) => (
-            <li key={event.id} className="rounded border border-white/6 bg-black/30 px-2 py-1.5 text-[11px]">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-bold text-white">{event.symbol}</span>
-                <Num className="text-slate-500">
-                  {new Date(event.at).toLocaleTimeString('en-GB', { hour12: false })}
-                </Num>
-              </div>
-              <p className="text-slate-300">{t(`alert.${event.kind}`)}</p>
+            <li key={event.id}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto w-full flex-col items-stretch rounded border border-white/6 bg-black/30 p-2 text-right hover:bg-white/5"
+                onClick={() => onSelectSymbol(event.symbol)}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-white">{event.symbol}</span>
+                  <Num className="text-slate-500">
+                    {new Date(event.at).toLocaleTimeString('en-GB', { hour12: false })}
+                  </Num>
+                </div>
+                <p className="text-slate-300 text-xs mt-0.5">{t(`alert.${event.kind}`)}</p>
+              </Button>
             </li>
           ))}
         </ul>
@@ -1258,12 +1538,23 @@ function SortHead({
         type="button"
         variant="ghost"
         size="sm"
-        className={cn('h-7 px-1', active ? 'text-[#4edea3]' : undefined)}
+        className={cn(
+          'h-7 gap-1 px-1.5 text-[11px] transition-colors',
+          active ? 'font-bold text-[#4edea3]' : 'text-slate-400 hover:text-slate-200'
+        )}
         aria-pressed={active}
         onClick={onSort}
       >
-        {label}
-        {active ? <span>{sort.dir === 'asc' ? '↑' : '↓'}</span> : null}
+        <span>{label}</span>
+        {active ? (
+          sort.dir === 'asc' ? (
+            <ArrowUp className="h-3 w-3 text-[#4edea3]" />
+          ) : (
+            <ArrowDown className="h-3 w-3 text-[#4edea3]" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
       </Button>
     </TableHead>
   );
@@ -1279,6 +1570,7 @@ function sortRows(
   symbols: string[],
   sort: { key: SortKey; dir: 'asc' | 'desc' } | null,
   quoteFor: (symbol: string) => LiveQuote | null,
+  rsiFor?: (symbol: string) => number | null,
 ): string[] {
   if (!sort) return symbols;
   const dir = sort.dir === 'asc' ? 1 : -1;
@@ -1287,6 +1579,7 @@ function sortRows(
     if (sort.key === 'last') return quote && quote.lastPrice > 0 ? quote.lastPrice : null;
     if (sort.key === 'change') return quote ? quote.changePercent : null;
     if (sort.key === 'power') return buyerPower(quote);
+    if (sort.key === 'rsi') return rsiFor ? rsiFor(symbol) : null;
     return netIndividualVolume(quote);
   };
   return [...symbols].sort((left, right) => {

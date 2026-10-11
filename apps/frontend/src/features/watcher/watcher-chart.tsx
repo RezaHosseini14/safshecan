@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { IChartApi, IPriceLine, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
-import { CandlestickChart } from 'lucide-react';
+import { CandlestickChart, Maximize2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Num } from '@/components/num';
 import type { DossierCandle, DossierTrade, LiveQuote, MarketDossier } from '@/lib/api';
@@ -32,11 +32,13 @@ export function WatcherChart({
   candles,
   vwap,
   largestTrade,
+  onReload,
 }: {
   quote: LiveQuote | null;
   candles: MarketDossier['candles'] | null;
   vwap: number | null;
   largestTrade: DossierTrade | null;
+  onReload?: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -143,39 +145,67 @@ export function WatcherChart({
           </span>
           <span className="text-sm font-bold text-white">{t('chartTitle')}</span>
         </div>
-        <div className="flex items-center gap-1 self-start rounded-lg border border-white/10 bg-white/4 p-1 text-xs sm:self-auto">
-          {RANGES.map((item) => {
-            const available = (candles?.[item.id]?.length ?? 0) > 0;
-            const active = activeRange === item.id && available;
-            return (
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/4 p-1 text-xs">
+            {RANGES.map((item) => {
+              const available = (candles?.[item.id]?.length ?? 0) > 0;
+              const active = activeRange === item.id && available;
+              return (
+                <Button
+                  key={item.id}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!available}
+                  aria-pressed={active}
+                  title={available ? t('rangeReady') : t('rangeMissing')}
+                  onClick={() => setRange(item.id)}
+                  className={cn(
+                    'h-7 px-2.5',
+                    active
+                      ? 'border border-[#4edea3]/30 bg-[#4edea3]/20 font-bold text-[#4edea3] shadow-[0_0_8px_rgba(78,222,163,0.25)] hover:bg-[#4edea3]/20 hover:text-[#4edea3]'
+                      : 'text-slate-500'
+                  )}
+                >
+                  {'minute' in item ? (
+                    <>
+                      <Num>{item.minute}</Num>M
+                    </>
+                  ) : item.id === 'tick' ? (
+                    t('range.tick')
+                  ) : (
+                    t('range.D')
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/4 p-1 text-xs">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title={t('fitChart')}
+              aria-label={t('fitChart')}
+              onClick={() => chartRef.current?.timeScale().fitContent()}
+              className="h-7 px-2 text-slate-400 hover:text-white"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </Button>
+            {onReload ? (
               <Button
-                key={item.id}
                 type="button"
                 variant="ghost"
                 size="sm"
-                disabled={!available}
-                aria-pressed={active}
-                title={available ? t('rangeReady') : t('rangeMissing')}
-                onClick={() => setRange(item.id)}
-                className={cn(
-                  'h-7 px-2.5',
-                  active
-                    ? 'border border-[#4edea3]/30 bg-[#4edea3]/20 font-bold text-[#4edea3] shadow-[0_0_8px_rgba(78,222,163,0.25)] hover:bg-[#4edea3]/20 hover:text-[#4edea3]'
-                    : 'text-slate-500'
-                )}
+                title={t('refreshChart')}
+                aria-label={t('refreshChart')}
+                onClick={onReload}
+                className="h-7 px-2 text-slate-400 hover:text-white"
               >
-                {'minute' in item ? (
-                  <>
-                    <Num>{item.minute}</Num>M
-                  </>
-                ) : item.id === 'tick' ? (
-                  t('range.tick')
-                ) : (
-                  t('range.D')
-                )}
+                <RotateCcw className="h-3.5 w-3.5" />
               </Button>
-            );
-          })}
+            ) : null}
+          </div>
         </div>
       </div>
 
