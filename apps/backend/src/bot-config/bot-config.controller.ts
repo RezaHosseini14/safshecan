@@ -5,6 +5,7 @@ import type { BotConfig } from '@saf-shekan/core';
 import { BotConfigService } from './bot-config.service.js';
 import { SaveConfigDto } from './dto/bot-config.dto.js';
 import { redactBotConfig } from './redact.js';
+import { RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('Config')
 @Controller('api')
@@ -13,6 +14,7 @@ export class BotConfigController {
 
   @Post('config')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('config:write')
   @ApiOperation({ summary: t('swagger', 'saveConfig') })
   @ApiResponse({ status: 200, description: t('swagger', 'saveConfigOk') })
   saveConfig(@Body() body: SaveConfigDto) {

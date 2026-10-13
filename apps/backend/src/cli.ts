@@ -1,6 +1,10 @@
 import chalk from 'chalk';
 import readline from 'node:readline';
+import { NestFactory } from '@nestjs/core';
 import { t } from '@saf-shekan/i18n';
+import { AppModule } from './app.module.js';
+import { BootstrapMigrationService } from './infrastructure/database/bootstrap-migration.service.js';
+import { AuthService } from './auth/auth.service.js';
 import { BotConfigService } from './bot-config/bot-config.service.js';
 import { MANUAL_TIME_SOURCE } from './clock/time-sync-policy.js';
 import { NestTimeSyncService } from './clock/time-sync.service.js';
@@ -149,4 +153,52 @@ function sourceLabel(source: string): string {
   return source === MANUAL_TIME_SOURCE ? t('errors', 'manualSource') : source;
 }
 
-runCli().catch(console.error);
+async function runMigrateConfig() {
+  console.log(chalk.cyan('Running config.json transactional migration...'));
+  try {
+    const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
+    const migrationService = app.get(BootstrapMigrationService);
+    const summary = await migrationService.migrateConfigInTransaction();
+    console.log(chalk.bold.green(`✓ ${t('cli', 'migrationSuccess')}`));
+    console.log(chalk.white(JSON.stringify(summary, null, 2)));
+    await app.close();
+    process.exit(0);
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(chalk.bold.red(`✕ ${t('cli', 'migrationFailed', { error: errorMsg })}`));
+    process.exit(1);
+  }
+}
+
+async function runCreateAdmin() {
+  const username = process.argv[3];
+  const password = process.argv[4];
+  const fullName = process.argv[5] || 'System Administrator';
+
+  if (!username || !password) {
+    console.log(chalk.yellow(t('cli', 'adminUsage')));
+    process.exit(1);
+  }
+
+  try {
+    const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
+    const authService = app.get(AuthService);
+    const admin = await authService.createAdmin(username, password, fullName);
+    console.log(chalk.bold.green(`✓ ${t('cli', 'adminCreated', { username: admin.username, id: admin.id })}`));
+    await app.close();
+    process.exit(0);
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(chalk.bold.red(`✕ ${t('cli', 'adminFailed', { error: errorMsg })}`));
+    process.exit(1);
+  }
+}
+
+const subcommand = process.argv[2];
+if (subcommand === 'migrate-config') {
+  void runMigrateConfig();
+} else if (subcommand === 'create-admin') {
+  void runCreateAdmin();
+} else {
+  runCli().catch(console.error);
+}

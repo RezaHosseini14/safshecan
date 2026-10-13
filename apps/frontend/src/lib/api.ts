@@ -146,15 +146,62 @@ export function apiUrl(endpoint: string): string {
   return `${API_PREFIX}${endpoint}`;
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+let isRefreshing = false;
+let refreshSubscribers: Array<(ok: boolean) => void> = [];
+
+function onRefreshed(ok: boolean) {
+  refreshSubscribers.forEach((cb) => cb(ok));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb: (ok: boolean) => void) {
+  refreshSubscribers.push(cb);
+}
+
+async function request<T>(endpoint: string, options: RequestInit = {}, retry = true): Promise<T> {
   const response = await fetch(apiUrl(endpoint), {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       Accept: 'application/json',
       ...(options.headers || {}),
     },
   });
+
+  if (response.status === 401 && retry && !endpoint.startsWith('/auth/')) {
+    if (!isRefreshing) {
+      isRefreshing = true;
+      try {
+        const refreshRes = await fetch(apiUrl('/auth/refresh'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            Accept: 'application/json',
+          },
+        });
+        isRefreshing = false;
+        if (refreshRes.ok) {
+          onRefreshed(true);
+          return request<T>(endpoint, options, false);
+        } else {
+          onRefreshed(false);
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+            window.location.href = `/login?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+          }
+        }
+      } catch {
+        isRefreshing = false;
+        onRefreshed(false);
+      }
+    } else {
+      const refreshed = await new Promise<boolean>((resolve) => addRefreshSubscriber(resolve));
+      if (refreshed) {
+        return request<T>(endpoint, options, false);
+      }
+    }
+  }
 
   if (!response.ok) {
     let message = t('common', 'serverError', { status: response.status });
@@ -277,4 +324,52 @@ export const api = {
     request<{ watchlist: string[] }>(`/market/watch?symbol=${encodeURIComponent(symbol)}`, {
       method: 'DELETE',
     }),
+  auth: {
+    login: (username: string, password: string) =>
+      request<{ success: boolean; requires2Fa?: boolean; tempToken?: string; user?: any }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      }),
+    login2Fa: (tempToken: string, code: string) =>
+      request<{ success: boolean; user: any }>('/auth/login/2fa', {
+        method: 'POST',
+        body: JSON.stringify({ tempToken, code }),
+      }),
+    logout: () =>
+      request<{ success: boolean; message: string }>('/auth/logout', { method: 'POST' }),
+    getMe: () =>
+      request<{ success: boolean; user: any }>('/auth/me'),
+    getSessions: () =>
+      request<{ success: boolean; sessions: Array<{ id: string; ipAddress: string | null; userAgent: string | null; createdAt: string; expiresAt: string }> }>('/auth/sessions'),
+    revokeSession: (id: string) =>
+      request<{ success: boolean; message: string }>(`/auth/sessions/${id}`, { method: 'DELETE' }),
+    revokeAllSessions: () =>
+      request<{ success: boolean; message: string }>('/auth/sessions/revoke-all', { method: 'POST' }),
+    setup2Fa: () =>
+      request<{ success: boolean; secret: string; otpauthUrl: string; recoveryCodes: string[] }>('/auth/2fa/setup', {
+        method: 'POST',
+      }),
+    confirm2Fa: (token: string) =>
+      request<{ success: boolean; message: string }>('/auth/2fa/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<{ success: boolean; message: string }>('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      }),
+    getUsers: () =>
+      request<{ success: boolean; users: Array<{ id: string; username: string; fullName: string | null; isActive: boolean; totpEnabled: boolean; roles: string[]; createdAt: string }> }>('/auth/users'),
+    createUser: (data: { username: string; password: string; fullName?: string; role?: string }) =>
+      request<{ success: boolean; user: any }>('/auth/users', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    toggleUser: (id: string, active: boolean) =>
+      request<{ success: boolean }>(`/auth/users/${id}/toggle`, {
+        method: 'POST',
+        body: JSON.stringify({ active }),
+      }),
+  },
 };

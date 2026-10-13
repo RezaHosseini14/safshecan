@@ -1,4 +1,5 @@
 import { createTranslator } from 'use-intl/core';
+import auth from '../messages/fa/auth.json' with { type: 'json' };
 import brokers from '../messages/fa/brokers.json' with { type: 'json' };
 import cli from '../messages/fa/cli.json' with { type: 'json' };
 import common from '../messages/fa/common.json' with { type: 'json' };
@@ -20,6 +21,7 @@ import watcher from '../messages/fa/watcher.json' with { type: 'json' };
 export const locale = 'fa' as const;
 
 export const messages = {
+  auth,
   brokers,
   cli,
   common,

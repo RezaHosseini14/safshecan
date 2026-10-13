@@ -4,8 +4,10 @@ import { t } from '@saf-shekan/i18n';
 import { SkipThrottle } from '@nestjs/throttler';
 import { SymbolsService, SymbolItem, SyncStatus } from './symbols.service.js';
 import { SymbolQueryDto } from './dto/symbol-query.dto.js';
+import { Public } from '../auth/decorators.js';
 
 @ApiTags('Symbols')
+@Public()
 @SkipThrottle()
 @Controller('api')
 export class SymbolsController {

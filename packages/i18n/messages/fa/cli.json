@@ -45,5 +45,10 @@
   "nominal": "تومان",
   "buyFee": "تومان (کارمزد خرید ۰.۳۷٪)",
   "sellFee": "تومان (کارمزد + مالیات ۰.۸۷٪)",
-  "breakEven": "تومان ({percent}% رشد برای خروج بدون زیان)"
+  "breakEven": "تومان ({percent}% رشد برای خروج بدون زیان)",
+  "migrationSuccess": "مهاجرت فایل تنظیمات داخل تراکنش با موفقیت انجام شد.",
+  "migrationFailed": "خطا در اجرای مهاجرت تنظیمات: {error}",
+  "adminCreated": "حساب مدیر سیستم با موفقیت ایجاد شد: {username} ({id})",
+  "adminFailed": "خطا در ایجاد حساب مدیر: {error}",
+  "adminUsage": "نحوه استفاده: pnpm cli create-admin <username> <password> [fullName]"
 }

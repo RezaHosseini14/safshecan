@@ -1,4 +1,52 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: saf-shekan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-safshekan_db}
+      POSTGRES_USER: ${POSTGRES_USER:-safshekan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - safshekan_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-safshekan} -d $${POSTGRES_DB:-safshekan_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+    networks:
+      - safshekan-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: saf-shekan-redis
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --requirepass \"$${REDIS_PASSWORD}\" --appendonly yes --appendfsync everysec --maxmemory \"$${REDIS_MAXMEMORY:-128mb}\" --maxmemory-policy volatile-lru"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-128mb}
+    volumes:
+      - safshekan_redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    networks:
+      - safshekan-net
+
   backend:
     image: ${BACKEND_IMAGE:-saf-shekan-backend:latest}
     build:
@@ -11,8 +59,23 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - DATABASE_URL=postgres://${POSTGRES_USER:-safshekan}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-safshekan_db}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-128mb}
+      - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY}
+      - ENCRYPTION_KEY_VERSION=${ENCRYPTION_KEY_VERSION:-1}
+      - JWT_KEY_ID=${JWT_KEY_ID:-safshekan-ed25519-v1}
+      - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
+      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
     volumes:
       - ./config.json:/app/apps/backend/config.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -85,3 +148,7 @@ services:
 networks:
   safshekan-net:
     driver: bridge
+
+volumes:
+  safshekan_pgdata:
+  safshekan_redisdata:

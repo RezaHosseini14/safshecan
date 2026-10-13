@@ -109,6 +109,34 @@ program
     });
   });
 
+// Command: migrate-config
+program
+  .command('migrate-config')
+  .description('Migrate legacy config.json into PostgreSQL in a single transaction')
+  .action(() => {
+    import('node:child_process').then(({ spawnSync }) => {
+      spawnSync('pnpm', ['--filter', '@saf-shekan/backend', 'cli', 'migrate-config'], {
+        stdio: 'inherit',
+        shell: true,
+      });
+    });
+  });
+
+// Command: create-admin
+program
+  .command('create-admin <username> <password> [fullName]')
+  .description('Create initial system administrator user in PostgreSQL')
+  .action((username, password, fullName) => {
+    import('node:child_process').then(({ spawnSync }) => {
+      const args = ['--filter', '@saf-shekan/backend', 'cli', 'create-admin', username, password];
+      if (fullName) args.push(fullName);
+      spawnSync('pnpm', args, {
+        stdio: 'inherit',
+        shell: true,
+      });
+    });
+  });
+
 program.parse(process.argv);
 
 if (!process.argv.slice(2).length) {

@@ -20,6 +20,8 @@ const NAV = [
     match: (path: string) => path.startsWith('/watcher'),
   },
   { href: '/reports', labelKey: 'nav.reports', match: (path: string) => path.startsWith('/reports') },
+  { href: '/profile', labelKey: 'nav.profile', match: (path: string) => path.startsWith('/profile') },
+  { href: '/admin/users', labelKey: 'nav.admin', match: (path: string) => path.startsWith('/admin') },
 ] as const;
 
 const STATE_KEY: Record<SniperState, 'state.IDLE' | 'state.ARMED' | 'state.PRE_WARMING' | 'state.FIRING' | 'state.COMPLETED' | 'state.CANCELLED' | 'state.ERROR'> = {

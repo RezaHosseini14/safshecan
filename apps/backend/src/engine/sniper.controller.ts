@@ -7,6 +7,7 @@ import { BotConfigService } from '../bot-config/bot-config.service.js';
 import { BROKER_PRESETS } from '../brokerage/broker-presets.js';
 import { NestTimeSyncService } from '../clock/time-sync.service.js';
 import { SniperService } from './sniper.service.js';
+import { Public, RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('Sniper Engine & System Status')
 @Controller('api')
@@ -17,17 +18,7 @@ export class SniperController {
     private readonly timeSyncService: NestTimeSyncService
   ) {}
 
-  @Get('health')
-  @ApiOperation({ summary: t('swagger', 'health') })
-  @ApiResponse({ status: 200, description: t('swagger', 'healthOk') })
-  getHealth() {
-    return {
-      status: 'ok',
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString(),
-    };
-  }
-
+  @Public()
   @Get('status')
   @ApiOperation({ summary: t('swagger', 'status') })
   @ApiResponse({ status: 200, description: t('swagger', 'statusOk') })
@@ -41,6 +32,7 @@ export class SniperController {
     };
   }
 
+  @Public()
   @Get('reports')
   @ApiOperation({ summary: t('swagger', 'history') })
   @ApiResponse({ status: 200, description: t('swagger', 'historyOk') })
@@ -55,6 +47,7 @@ export class SniperController {
 
   @Post('sniper/arm')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('sniper:arm')
   @ApiOperation({ summary: t('swagger', 'arm') })
   @ApiResponse({ status: 200, description: t('swagger', 'armOk') })
   armSniper() {
@@ -64,6 +57,7 @@ export class SniperController {
   @Post('sniper/disarm')
   @HttpCode(HttpStatus.OK)
   @SkipThrottle()
+  @RequirePermissions('sniper:disarm')
   @ApiOperation({ summary: t('swagger', 'disarm') })
   @ApiResponse({ status: 200, description: t('swagger', 'disarmOk') })
   disarmSniper() {
@@ -73,6 +67,7 @@ export class SniperController {
   @Post('sniper/test-shot')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 12, ttl: 60000 } })
+  @RequirePermissions('sniper:fire_test')
   @ApiOperation({ summary: t('swagger', 'testShot') })
   @ApiResponse({ status: 200, description: t('swagger', 'testShotOk') })
   async testShot() {

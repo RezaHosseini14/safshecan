@@ -252,6 +252,23 @@ jobs:
             echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> .env
           fi
 
+          # Ensure production database, cache, and encryption secrets exist in .env
+          if ! grep -q '^POSTGRES_PASSWORD=' .env; then
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
+          fi
+          if ! grep -q '^REDIS_PASSWORD=' .env; then
+            echo "REDIS_PASSWORD=$(openssl rand -hex 24)" >> .env
+          fi
+          if ! grep -q '^ENCRYPTION_MASTER_KEY=' .env; then
+            echo "ENCRYPTION_MASTER_KEY=$(openssl rand -hex 32)" >> .env
+          fi
+          if ! grep -q '^JWT_ACCESS_SECRET=' .env; then
+            echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> .env
+          fi
+          if ! grep -q '^JWT_REFRESH_SECRET=' .env; then
+            echo "JWT_REFRESH_SECRET=$(openssl rand -base64 48)" >> .env
+          fi
+
           # Remove legacy env keys if present
           sed -i '/^API_IMAGE=/d;/^WEB_IMAGE=/d' .env || true
 
@@ -280,6 +297,21 @@ jobs:
           done
           if [ "$pulled" != 1 ]; then
             echo "::error::docker compose pull failed after 5 attempts"
+            exit 1
+          fi
+
+          echo "--> Starting Postgres and Redis data layer..."
+          if ! docker compose up -d postgres redis --wait --wait-timeout 60; then
+            echo "::error::Postgres or Redis failed to become healthy within 60s"
+            docker compose ps || true
+            docker logs saf-shekan-postgres --tail 50 || true
+            docker logs saf-shekan-redis --tail 50 || true
+            exit 1
+          fi
+
+          echo "--> Executing database migrations..."
+          if ! docker compose run --rm backend node apps/backend/dist/infrastructure/database/migrate.js; then
+            echo "::error::Database migrations failed! Halting deployment to protect uptime."
             exit 1
           fi
 

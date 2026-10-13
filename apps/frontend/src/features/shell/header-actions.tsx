@@ -1,8 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
+import { LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const iconChrome =
@@ -52,6 +55,16 @@ export function HeaderActions() {
   const { resolvedTheme, setTheme } = useTheme();
   const light = resolvedTheme === 'light';
 
+  const handleLogout = async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // handled
+    } finally {
+      window.location.href = '/login';
+    }
+  };
+
   return (
     <div className="flex items-center gap-1.5">
       <Button
@@ -75,6 +88,31 @@ export function HeaderActions() {
         onClick={() => setTheme(light ? 'dark' : 'light')}
       >
         {light ? <SunIcon /> : <MoonIcon />}
+      </Button>
+
+      <Button
+        asChild
+        variant="ghost"
+        size="icon"
+        className={cn(iconChrome, 'text-slate-300 hover:text-white')}
+        title={t('nav.profile')}
+        aria-label={t('nav.profile')}
+      >
+        <Link href="/profile">
+          <User className="h-4 w-4" />
+        </Link>
+      </Button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(iconChrome, 'text-rose-400 hover:text-rose-300')}
+        title={t('logout')}
+        aria-label={t('logout')}
+        onClick={handleLogout}
+      >
+        <LogOut className="h-4 w-4" />
       </Button>
     </div>
   );

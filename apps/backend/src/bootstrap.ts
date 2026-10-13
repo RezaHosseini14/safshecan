@@ -5,6 +5,7 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationError } from 'class-validator';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { messages, t, type MessageKey } from '@saf-shekan/i18n';
 import { AppModule } from './app.module.js';
 
@@ -39,6 +40,12 @@ export async function createNestApp() {
 
   // آداپتور وب‌سوکت فوق‌سریع ws
   app.useWebSocketAdapter(new WsAdapter(app));
+
+  // کوکی‌پارسر برای کوکی‌های امن httpOnly نشست
+  app.use(cookieParser());
+
+  // خاموش‌سازی نرم و بستن اتصالات دیتابیس و ردیس
+  app.enableShutdownHooks();
 
   // امنیت و هدرهای محافظتی
   app.use(
