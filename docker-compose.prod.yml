@@ -63,6 +63,11 @@ services:
       - REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-128mb}
       - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY}
       - ENCRYPTION_KEY_VERSION=${ENCRYPTION_KEY_VERSION:-1}
+      # Required by the app's env validation in production (see
+      # apps/backend/src/shared/config/env.module.ts). Without these the
+      # backend throws on boot and the deployment health check fails.
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - JWT_KEY_ID=${JWT_KEY_ID:-safshekan-ed25519-v1}
       - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
       - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}

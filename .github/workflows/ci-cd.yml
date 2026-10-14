@@ -18,6 +18,14 @@ permissions:
 env:
   REGISTRY: ghcr.io
   REMOTE_DIR: /opt/saf-shekan
+  # Shared SSH hardening flags for every remote command (keeps each step
+  # hermetic instead of relying only on the generated ~/.ssh/config).
+  SSH_FLAGS: >-
+    -o ConnectTimeout=20
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=20
+    -o TCPKeepAlive=yes
+    -o StrictHostKeyChecking=accept-new
 
 jobs:
   # ==========================================
@@ -94,9 +102,11 @@ jobs:
           OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-backend"
           TAG="${{ github.sha }}"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
+          {
+            echo "image=${IMAGE}"
+            echo "tag=${TAG}"
+            echo "ref=${IMAGE}:${TAG}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build & Push Backend Docker image
         uses: docker/build-push-action@v6
@@ -149,9 +159,11 @@ jobs:
           OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           IMAGE="${{ env.REGISTRY }}/${OWNER}/safshecan-frontend"
           TAG="${{ github.sha }}"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "ref=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
+          {
+            echo "image=${IMAGE}"
+            echo "tag=${TAG}"
+            echo "ref=${IMAGE}:${TAG}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build & Push Frontend Docker image
         uses: docker/build-push-action@v6
@@ -166,18 +178,48 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
 
   # ==========================================
-  # STAGE 3: Production Deployment to Server
+  # STAGE 3A: Deployment Preflight
   # ==========================================
-  deploy:
-    name: Deploy to Production VPS
+  # A missing deploy secret must never turn the pipeline red. When no SSH key
+  # is configured the deployment is skipped with a warning instead of failing.
+  preflight:
+    name: Deployment Preflight
     needs: [build-backend, build-frontend]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+
+    outputs:
+      deploy_enabled: ${{ steps.check.outputs.deploy_enabled }}
+
+    steps:
+      - name: Detect deployment credentials
+        id: check
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          if [ -n "${SSH_PRIVATE_KEY}" ]; then
+            echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Deployment credentials detected."
+          else
+            echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SSH_PRIVATE_KEY is not configured. Skipping production deployment."
+          fi
+
+  # ==========================================
+  # STAGE 3B: Production Deployment to Server
+  # ==========================================
+  deploy:
+    name: Deploy to Production VPS
+    needs: [build-backend, build-frontend, preflight]
+    if: github.event_name != 'pull_request' && needs.preflight.outputs.deploy_enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     env:
       SSH_HOST: ${{ secrets.SSH_HOST || '5.159.49.36' }}
       SSH_USER: ${{ secrets.SSH_USER || 'root' }}
+      TLS_HOST: ${{ secrets.SSH_HOST || '5.159.49.36' }}
 
     steps:
       - name: Checkout repository
@@ -215,11 +257,33 @@ jobs:
 
       - name: Sync compose + nginx config to server
         run: |
-          ssh -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.REMOTE_DIR }}/docker"
-          scp docker-compose.prod.yml "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker-compose.yml"
-          scp docker/nginx.conf "$SSH_USER@$SSH_HOST:${{ env.REMOTE_DIR }}/docker/nginx.conf"
-          # Ensure persistent config.json exists (do not overwrite if present)
-          ssh "$SSH_USER@$SSH_HOST" "test -f ${{ env.REMOTE_DIR }}/config.json || echo '{}' > ${{ env.REMOTE_DIR }}/config.json"
+          set -euo pipefail
+
+          # Transient SSH/SCP drops are the single most common cause of a red
+          # deploy run, so every connection gets a bounded retry.
+          retry() {
+            local attempt=1
+            local max=5
+            until "$@"; do
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::Command failed after ${max} attempts: $*"
+                return 1
+              fi
+              echo "Attempt ${attempt} failed. Retrying in $((attempt * 5))s..."
+              sleep $((attempt * 5))
+              attempt=$((attempt + 1))
+            done
+          }
+
+          # shellcheck disable=SC2086
+          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "mkdir -p $REMOTE_DIR/docker"
+          # shellcheck disable=SC2086
+          retry scp $SSH_FLAGS docker-compose.prod.yml "$SSH_USER@$SSH_HOST:$REMOTE_DIR/docker-compose.yml"
+          # shellcheck disable=SC2086
+          retry scp $SSH_FLAGS docker/nginx.conf "$SSH_USER@$SSH_HOST:$REMOTE_DIR/docker/nginx.conf"
+          # Ensure persistent config.json exists (never overwrite an existing one)
+          # shellcheck disable=SC2086
+          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "test -f $REMOTE_DIR/config.json || printf '{}\n' > $REMOTE_DIR/config.json"
 
       - name: Pull images & rolling restart on server
         env:
@@ -228,10 +292,18 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
-          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 "$SSH_USER@$SSH_HOST" \
-            BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
-            GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="${{ env.REMOTE_DIR }}" \
-            bash -s <<'EOF'
+          set -euo pipefail
+
+          # The rollout is idempotent, so retrying the whole remote script is safe
+          # when the long-lived SSH session drops mid-way.
+          run_remote_deploy() {
+            # shellcheck disable=SC2086
+            ssh $SSH_FLAGS \
+              "$SSH_USER@$SSH_HOST" \
+              BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
+              GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="$REMOTE_DIR" \
+              TLS_HOST="$TLS_HOST" \
+              bash -s <<'EOF'
           set -euo pipefail
           cd "$REMOTE_DIR"
 
@@ -316,7 +388,17 @@ jobs:
           fi
 
           echo "--> Applying rolling update (nginx + backend + frontend)..."
-          if ! docker compose up -d --remove-orphans --wait --wait-timeout 180; then
+          upped=0
+          for attempt in 1 2 3; do
+            if docker compose up -d --remove-orphans --wait --wait-timeout 300; then
+              upped=1
+              break
+            fi
+            echo "compose up failed (attempt ${attempt}), retrying..."
+            docker compose ps || true
+            sleep $((attempt * 10))
+          done
+          if [ "$upped" != 1 ]; then
             echo "::error::docker compose up failed"
             docker compose ps || true
             echo "=== SafShekan Backend Logs ==="
@@ -349,9 +431,23 @@ jobs:
           echo "--> Cleaning up unused dangling images..."
           docker image prune -f || true
           EOF
+          }
+
+          attempt=1
+          max=3
+          until run_remote_deploy; do
+            if [ "$attempt" -ge "$max" ]; then
+              echo "::error::Remote rollout failed after ${max} attempts"
+              exit 1
+            fi
+            echo "Remote rollout attempt ${attempt} failed. Retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+            attempt=$((attempt + 1))
+          done
 
       - name: Production Health Check Verification
         run: |
+          set -uo pipefail
           echo "Verifying stack at https://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
           STACK_UP=false
           for i in $(seq 1 40); do
@@ -368,7 +464,14 @@ jobs:
           done
 
           if [ "$STACK_UP" = false ]; then
-            echo "Deployment Health Check Failed!"
+            echo "::error::Deployment health check failed"
+            echo "=== Container status (via SSH, best effort) ==="
+            # shellcheck disable=SC2086
+            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker ps" || true
+            # shellcheck disable=SC2086
+            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-frontend --tail 60" || true
+            # shellcheck disable=SC2086
+            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-backend --tail 60" || true
             exit 1
           fi
 
@@ -377,7 +480,7 @@ jobs:
       - name: Publish Deployment Summary
         if: always()
         run: |
-          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
           ## SafShekan Production Deployment Report
 
           | Component | Status | URL |
