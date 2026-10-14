@@ -324,6 +324,12 @@ jobs:
             echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> .env
           fi
 
+          if [ -z "${BACKEND_IMAGE}" ] || [ -z "${FRONTEND_IMAGE}" ]; then
+            echo "::error::Build jobs did not pass backend/frontend image refs"
+            exit 1
+          fi
+          echo "--> Target images: backend=${BACKEND_IMAGE} frontend=${FRONTEND_IMAGE}"
+
           # Ensure production database, cache, and encryption secrets exist in .env
           if ! grep -q '^POSTGRES_PASSWORD=' .env; then
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
@@ -388,9 +394,12 @@ jobs:
           fi
 
           echo "--> Applying rolling update (nginx + backend + frontend)..."
+          # --force-recreate guarantees the freshly built images are what actually
+          # ends up running; without it an unchanged resolved config makes
+          # `compose up` a silent no-op and the old build keeps serving traffic.
           upped=0
           for attempt in 1 2 3; do
-            if docker compose up -d --remove-orphans --wait --wait-timeout 300; then
+            if docker compose up -d --remove-orphans --force-recreate --wait --wait-timeout 300; then
               upped=1
               break
             fi
@@ -407,6 +416,20 @@ jobs:
             docker logs saf-shekan-frontend --tail 100 || true
             echo "=== SafShekan Nginx Logs ==="
             docker logs saf-shekan-nginx --tail 100 || true
+            exit 1
+          fi
+
+          echo "--> Verifying the running containers use the freshly built images..."
+          EXPECTED_BACKEND_ID=$(docker image inspect --format '{{.Id}}' "$BACKEND_IMAGE" 2>/dev/null || echo '')
+          EXPECTED_FRONTEND_ID=$(docker image inspect --format '{{.Id}}' "$FRONTEND_IMAGE" 2>/dev/null || echo '')
+          RUNNING_BACKEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-backend 2>/dev/null || echo '')
+          RUNNING_FRONTEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-frontend 2>/dev/null || echo '')
+          echo "    backend:  running=${RUNNING_BACKEND_ID} expected=${EXPECTED_BACKEND_ID}"
+          echo "    frontend: running=${RUNNING_FRONTEND_ID} expected=${EXPECTED_FRONTEND_ID}"
+          if [ -z "$RUNNING_BACKEND_ID" ] || [ "$RUNNING_BACKEND_ID" != "$EXPECTED_BACKEND_ID" ] \
+            || [ -z "$RUNNING_FRONTEND_ID" ] || [ "$RUNNING_FRONTEND_ID" != "$EXPECTED_FRONTEND_ID" ]; then
+            echo "::error::Running containers are not on the built images; the deployment did not take effect"
+            docker compose ps || true
             exit 1
           fi
 
@@ -472,6 +495,20 @@ jobs:
             ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-frontend --tail 60" || true
             # shellcheck disable=SC2086
             ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-backend --tail 60" || true
+            exit 1
+          fi
+
+          # The login route and the auth API only exist in this build, so they
+          # prove the new images are serving traffic (a stale stack returns 404).
+          LOGIN_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${SSH_HOST}:3000/login" || echo "000")
+          AUTH_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${SSH_HOST}:3000/api/auth/me" || echo "000")
+          echo "Post-deploy probe: /login=${LOGIN_CODE} /api/auth/me=${AUTH_CODE}"
+          if [ "$LOGIN_CODE" != "200" ]; then
+            echo "::error::/login returned ${LOGIN_CODE} (expected 200) — the frontend is still serving an old image"
+            exit 1
+          fi
+          if [ "$AUTH_CODE" = "404" ]; then
+            echo "::error::/api/auth/me returned 404 — the backend is still serving an old image"
             exit 1
           fi
 
