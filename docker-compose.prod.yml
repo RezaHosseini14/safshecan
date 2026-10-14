@@ -73,6 +73,7 @@ services:
       - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
     volumes:
       - ./config.json:/app/apps/backend/config.json
+      - safshekan_data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -152,3 +153,4 @@ networks:
 volumes:
   safshekan_pgdata:
   safshekan_redisdata:
+  safshekan_data:

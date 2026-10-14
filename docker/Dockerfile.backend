@@ -22,7 +22,9 @@ FROM public.ecr.aws/docker/library/node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs \
-  && adduser --system --uid 1001 safshekan
+  && adduser --system --uid 1001 --ingroup nodejs safshekan \
+  && mkdir -p /app/data \
+  && chown -R safshekan:nodejs /app
 
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml

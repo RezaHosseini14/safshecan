@@ -276,7 +276,7 @@ jobs:
           }
 
           # shellcheck disable=SC2086
-          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "mkdir -p $REMOTE_DIR/docker"
+          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "mkdir -p $REMOTE_DIR/docker $REMOTE_DIR/data && chown -R 1001:1001 $REMOTE_DIR/data 2>/dev/null || true"
           # shellcheck disable=SC2086
           retry scp $SSH_FLAGS docker-compose.prod.yml "$SSH_USER@$SSH_HOST:$REMOTE_DIR/docker-compose.yml"
           # shellcheck disable=SC2086

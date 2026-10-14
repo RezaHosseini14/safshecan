@@ -1,18 +1,19 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { QueueService, type OrderArchiveJobPayload } from './queue.service.js';
 import { DatabaseService } from '../database/database.service.js';
 import * as schema from '../database/schema/index.js';
 
-const FALLBACK_DIR = path.resolve(process.cwd(), 'data');
-const FALLBACK_FILE = path.join(FALLBACK_DIR, 'order-attempts.fallback.jsonl');
 const MAX_BUFFER_SIZE = 5000;
 
 @Injectable()
 export class OrderDurabilityService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OrderDurabilityService.name);
+  private fallbackDir = process.env.DATA_DIR || path.resolve(process.cwd(), 'data');
+  private fallbackFile = path.join(this.fallbackDir, 'order-attempts.fallback.jsonl');
   private ringBuffer: OrderArchiveJobPayload[] = [];
   private fallbackWritesCount = 0;
   private replayedRecordsCount = 0;
@@ -67,7 +68,7 @@ export class OrderDurabilityService implements OnModuleInit, OnModuleDestroy {
     try {
       this.ensureDataDirectory();
       const line = JSON.stringify(attempt) + '\n';
-      fs.appendFileSync(FALLBACK_FILE, line, { encoding: 'utf8' });
+      fs.appendFileSync(this.fallbackFile, line, { encoding: 'utf8' });
       this.fallbackWritesCount++;
     } catch (err: unknown) {
       this.logger.error(`CRITICAL: Failed to write fallback order attempt to disk: ${err instanceof Error ? err.message : String(err)}`);
@@ -79,7 +80,7 @@ export class OrderDurabilityService implements OnModuleInit, OnModuleDestroy {
     try {
       this.ensureDataDirectory();
       const lines = this.ringBuffer.map((item) => JSON.stringify(item)).join('\n') + '\n';
-      fs.appendFileSync(FALLBACK_FILE, lines, { encoding: 'utf8' });
+      fs.appendFileSync(this.fallbackFile, lines, { encoding: 'utf8' });
       this.fallbackWritesCount += this.ringBuffer.length;
       this.ringBuffer = [];
       this.logger.log('Flushed in-memory order attempts to fallback file.');
@@ -89,12 +90,12 @@ export class OrderDurabilityService implements OnModuleInit, OnModuleDestroy {
   }
 
   public async replayFallbackFile(): Promise<number> {
-    if (!fs.existsSync(FALLBACK_FILE)) {
+    if (!fs.existsSync(this.fallbackFile)) {
       return 0;
     }
 
-    this.logger.log(`Found fallback order attempts file at ${FALLBACK_FILE}, starting replay...`);
-    const fileStream = fs.createReadStream(FALLBACK_FILE, { encoding: 'utf8' });
+    this.logger.log(`Found fallback order attempts file at ${this.fallbackFile}, starting replay...`);
+    const fileStream = fs.createReadStream(this.fallbackFile, { encoding: 'utf8' });
     const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
     const attemptsToReplay: OrderArchiveJobPayload[] = [];
@@ -110,7 +111,11 @@ export class OrderDurabilityService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (attemptsToReplay.length === 0) {
-      fs.unlinkSync(FALLBACK_FILE);
+      try {
+        fs.unlinkSync(this.fallbackFile);
+      } catch {
+        // ignore cleanup error
+      }
       return 0;
     }
 
@@ -138,8 +143,8 @@ export class OrderDurabilityService implements OnModuleInit, OnModuleDestroy {
       });
 
       this.replayedRecordsCount += attemptsToReplay.length;
-      const replayedArchiveFile = `${FALLBACK_FILE}.replayed.${Date.now()}`;
-      fs.renameSync(FALLBACK_FILE, replayedArchiveFile);
+      const replayedArchiveFile = `${this.fallbackFile}.replayed.${Date.now()}`;
+      fs.renameSync(this.fallbackFile, replayedArchiveFile);
       this.logger.log(`Successfully replayed ${attemptsToReplay.length} fallback order attempts into database!`);
       return attemptsToReplay.length;
     } catch (err: unknown) {
@@ -149,8 +154,24 @@ export class OrderDurabilityService implements OnModuleInit, OnModuleDestroy {
   }
 
   private ensureDataDirectory(): void {
-    if (!fs.existsSync(FALLBACK_DIR)) {
-      fs.mkdirSync(FALLBACK_DIR, { recursive: true });
+    try {
+      if (!fs.existsSync(this.fallbackDir)) {
+        fs.mkdirSync(this.fallbackDir, { recursive: true });
+      }
+    } catch (err: unknown) {
+      const tmpFallback = path.join(os.tmpdir(), 'safshekan-data');
+      this.logger.warn(
+        `Failed to access or create ${this.fallbackDir}: ${err instanceof Error ? err.message : String(err)}. Falling back to ${tmpFallback}`
+      );
+      this.fallbackDir = tmpFallback;
+      this.fallbackFile = path.join(this.fallbackDir, 'order-attempts.fallback.jsonl');
+      try {
+        if (!fs.existsSync(this.fallbackDir)) {
+          fs.mkdirSync(this.fallbackDir, { recursive: true });
+        }
+      } catch (innerErr: unknown) {
+        this.logger.error(`Failed to create fallback directory in temp: ${innerErr instanceof Error ? innerErr.message : String(innerErr)}`);
+      }
     }
   }
 
