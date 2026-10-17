@@ -55,7 +55,7 @@ services:
     container_name: saf-shekan-backend
     restart: unless-stopped
     expose:
-      - "3000"
+      - "4031:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
