@@ -306,6 +306,13 @@ jobs:
               bash -s <<'EOF'
           set -euo pipefail
           cd "$REMOTE_DIR"
+          # Never pick up a stale COMPOSE_FILE from the server environment.
+          unset COMPOSE_FILE COMPOSE_PATH || true
+          export COMPOSE_PROJECT_NAME=saf-shekan
+
+          echo "--> Deploy host: $(hostname) pwd=$(pwd)"
+          echo "--> Compose ports (must include 4030/4031):"
+          grep -nE 'ports:|4030|4031|3000:443' docker-compose.yml || true
 
           if [ -n "${GHCR_TOKEN}" ]; then
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
@@ -329,6 +336,8 @@ jobs:
             exit 1
           fi
           echo "--> Target images: backend=${BACKEND_IMAGE} frontend=${FRONTEND_IMAGE}"
+          echo "--> .env image pins:"
+          grep -E '^(BACKEND_IMAGE|FRONTEND_IMAGE)=' .env
 
           # Ensure production database, cache, and encryption secrets exist in .env
           if ! grep -q '^POSTGRES_PASSWORD=' .env; then
@@ -350,8 +359,9 @@ jobs:
           # Remove legacy env keys if present
           sed -i '/^API_IMAGE=/d;/^WEB_IMAGE=/d' .env || true
 
-          # Stop legacy published ports if still running (api:3880 / old frontend:3000)
-          docker rm -f saf-shekan-api saf-shekan-web 2>/dev/null || true
+          # Stop legacy / orphaned containers that can block compose name reuse.
+          docker rm -f saf-shekan-api saf-shekan-web \
+            saf-shekan-backend saf-shekan-frontend saf-shekan-nginx 2>/dev/null || true
 
           mkdir -p docker/certs
           if [ ! -s docker/certs/server.crt ] || [ ! -s docker/certs/server.key ]; then
@@ -366,7 +376,7 @@ jobs:
           echo "--> Pulling latest container images..."
           pulled=0
           for attempt in 1 2 3 4 5; do
-            if docker compose pull; then
+            if docker compose -f docker-compose.yml pull; then
               pulled=1
               break
             fi
@@ -379,37 +389,37 @@ jobs:
           fi
 
           echo "--> Starting Postgres and Redis data layer..."
-          if ! docker compose up -d postgres redis --wait --wait-timeout 60; then
+          if ! docker compose -f docker-compose.yml up -d postgres redis --wait --wait-timeout 60; then
             echo "::error::Postgres or Redis failed to become healthy within 60s"
-            docker compose ps || true
+            docker compose -f docker-compose.yml ps || true
             docker logs saf-shekan-postgres --tail 50 || true
             docker logs saf-shekan-redis --tail 50 || true
             exit 1
           fi
 
           echo "--> Executing database migrations..."
-          if ! docker compose run --rm backend node apps/backend/dist/infrastructure/database/migrate.js; then
+          if ! docker compose -f docker-compose.yml run --rm backend node apps/backend/dist/infrastructure/database/migrate.js; then
             echo "::error::Database migrations failed! Halting deployment to protect uptime."
             exit 1
           fi
 
           echo "--> Applying rolling update (nginx + backend + frontend)..."
-          # --force-recreate guarantees the freshly built images are what actually
-          # ends up running; without it an unchanged resolved config makes
-          # `compose up` a silent no-op and the old build keeps serving traffic.
+          # Containers were removed above so compose cannot silently keep a
+          # 3-day-old stack that shares the same container_name but lives
+          # outside this compose project.
           upped=0
           for attempt in 1 2 3; do
-            if docker compose up -d --remove-orphans --force-recreate --wait --wait-timeout 300; then
+            if docker compose -f docker-compose.yml up -d --remove-orphans --force-recreate --wait --wait-timeout 300; then
               upped=1
               break
             fi
             echo "compose up failed (attempt ${attempt}), retrying..."
-            docker compose ps || true
+            docker compose -f docker-compose.yml ps || true
             sleep $((attempt * 10))
           done
           if [ "$upped" != 1 ]; then
             echo "::error::docker compose up failed"
-            docker compose ps || true
+            docker compose -f docker-compose.yml ps || true
             echo "=== SafShekan Backend Logs ==="
             docker logs saf-shekan-backend --tail 100 || true
             echo "=== SafShekan Frontend Logs ==="
@@ -424,14 +434,37 @@ jobs:
           EXPECTED_FRONTEND_ID=$(docker image inspect --format '{{.Id}}' "$FRONTEND_IMAGE" 2>/dev/null || echo '')
           RUNNING_BACKEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-backend 2>/dev/null || echo '')
           RUNNING_FRONTEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-frontend 2>/dev/null || echo '')
-          echo "    backend:  running=${RUNNING_BACKEND_ID} expected=${EXPECTED_BACKEND_ID}"
-          echo "    frontend: running=${RUNNING_FRONTEND_ID} expected=${EXPECTED_FRONTEND_ID}"
+          RUNNING_BACKEND_REF=$(docker inspect --format '{{.Config.Image}}' saf-shekan-backend 2>/dev/null || echo '')
+          RUNNING_FRONTEND_REF=$(docker inspect --format '{{.Config.Image}}' saf-shekan-frontend 2>/dev/null || echo '')
+          echo "    backend:  running=${RUNNING_BACKEND_ID} ref=${RUNNING_BACKEND_REF} expected=${EXPECTED_BACKEND_ID} (${BACKEND_IMAGE})"
+          echo "    frontend: running=${RUNNING_FRONTEND_ID} ref=${RUNNING_FRONTEND_REF} expected=${EXPECTED_FRONTEND_ID} (${FRONTEND_IMAGE})"
           if [ -z "$RUNNING_BACKEND_ID" ] || [ "$RUNNING_BACKEND_ID" != "$EXPECTED_BACKEND_ID" ] \
             || [ -z "$RUNNING_FRONTEND_ID" ] || [ "$RUNNING_FRONTEND_ID" != "$EXPECTED_FRONTEND_ID" ]; then
             echo "::error::Running containers are not on the built images; the deployment did not take effect"
-            docker compose ps || true
+            docker ps --filter name=saf-shekan || true
             exit 1
           fi
+
+          echo "--> Verifying published host ports (backend:4030 frontend:4031 nginx:3000)..."
+          docker ps --filter name=saf-shekan --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+          BACKEND_PORTS=$(docker port saf-shekan-backend 3000/tcp 2>/dev/null || true)
+          FRONTEND_PORTS=$(docker port saf-shekan-frontend 3000/tcp 2>/dev/null || true)
+          NGINX_PORTS=$(docker port saf-shekan-nginx 443/tcp 2>/dev/null || true)
+          echo "    backend 3000/tcp -> ${BACKEND_PORTS}"
+          echo "    frontend 3000/tcp -> ${FRONTEND_PORTS}"
+          echo "    nginx 443/tcp -> ${NGINX_PORTS}"
+          echo "$BACKEND_PORTS" | grep -qE '(:|::)4030$' || {
+            echo "::error::backend is not published on host port 4030 (got: ${BACKEND_PORTS})"
+            exit 1
+          }
+          echo "$FRONTEND_PORTS" | grep -qE '(:|::)4031$' || {
+            echo "::error::frontend is not published on host port 4031 (got: ${FRONTEND_PORTS})"
+            exit 1
+          }
+          echo "$NGINX_PORTS" | grep -qE '(:|::)3000$' || {
+            echo "::error::nginx is not published on host port 3000 (got: ${NGINX_PORTS})"
+            exit 1
+          }
 
           # compose up does not reload an already-running nginx when only the
           # mounted config changed. Wait until the master process exists; a
@@ -531,6 +564,7 @@ jobs:
           - **Triggered By**: @${{ github.actor }}
           - **Target VPS**: \`${{ env.SSH_HOST }}\` (\`/opt/saf-shekan\`)
           - **Gateway**: nginx on \`:3000\` → backend \`/api\`+\`/ws\`, frontend \`/\`
+          - **Direct ports**: backend \`:4030\`, frontend \`:4031\`
           - **Backend Image**: \`${{ needs.build-backend.outputs.image_ref }}\`
           - **Frontend Image**: \`${{ needs.build-frontend.outputs.image_ref }}\`
           EOF
