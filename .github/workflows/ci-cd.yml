@@ -359,9 +359,9 @@ jobs:
           # Remove legacy env keys if present
           sed -i '/^API_IMAGE=/d;/^WEB_IMAGE=/d' .env || true
 
-          # Stop legacy / orphaned containers that can block compose name reuse.
-          docker rm -f saf-shekan-api saf-shekan-web \
-            saf-shekan-backend saf-shekan-frontend saf-shekan-nginx 2>/dev/null || true
+          # Legacy container names only — never delete the live app tier before
+          # the replacement is confirmed up (that previously left prod dark).
+          docker rm -f saf-shekan-api saf-shekan-web 2>/dev/null || true
 
           mkdir -p docker/certs
           if [ ! -s docker/certs/server.crt ] || [ ! -s docker/certs/server.key ]; then
@@ -376,7 +376,7 @@ jobs:
           echo "--> Pulling latest container images..."
           pulled=0
           for attempt in 1 2 3 4 5; do
-            if docker compose -f docker-compose.yml pull; then
+            if docker compose -f docker-compose.yml pull backend frontend; then
               pulled=1
               break
             fi
@@ -398,35 +398,29 @@ jobs:
           fi
 
           echo "--> Executing database migrations..."
-          if ! docker compose -f docker-compose.yml run --rm backend node apps/backend/dist/infrastructure/database/migrate.js; then
+          if ! docker compose -f docker-compose.yml run --rm --no-deps backend \
+            node apps/backend/dist/infrastructure/database/migrate.js; then
             echo "::error::Database migrations failed! Halting deployment to protect uptime."
             exit 1
           fi
 
-          echo "--> Applying rolling update (nginx + backend + frontend)..."
-          # Containers were removed above so compose cannot silently keep a
-          # 3-day-old stack that shares the same container_name but lives
-          # outside this compose project.
-          upped=0
-          for attempt in 1 2 3; do
-            if docker compose -f docker-compose.yml up -d --remove-orphans --force-recreate --wait --wait-timeout 300; then
-              upped=1
-              break
+          recreate_app() {
+            docker compose -f docker-compose.yml up -d --pull missing --force-recreate \
+              --wait --wait-timeout 300 backend frontend nginx
+          }
+
+          echo "--> Recreating backend + frontend + nginx (DB left running)..."
+          if ! recreate_app; then
+            echo "--> Recreate failed (often a stale container_name). Replacing app containers once..."
+            docker rm -f saf-shekan-backend saf-shekan-frontend saf-shekan-nginx 2>/dev/null || true
+            if ! recreate_app; then
+              echo "::error::docker compose up failed for backend/frontend/nginx"
+              docker compose -f docker-compose.yml ps || true
+              docker logs saf-shekan-backend --tail 100 || true
+              docker logs saf-shekan-frontend --tail 100 || true
+              docker logs saf-shekan-nginx --tail 100 || true
+              exit 1
             fi
-            echo "compose up failed (attempt ${attempt}), retrying..."
-            docker compose -f docker-compose.yml ps || true
-            sleep $((attempt * 10))
-          done
-          if [ "$upped" != 1 ]; then
-            echo "::error::docker compose up failed"
-            docker compose -f docker-compose.yml ps || true
-            echo "=== SafShekan Backend Logs ==="
-            docker logs saf-shekan-backend --tail 100 || true
-            echo "=== SafShekan Frontend Logs ==="
-            docker logs saf-shekan-frontend --tail 100 || true
-            echo "=== SafShekan Nginx Logs ==="
-            docker logs saf-shekan-nginx --tail 100 || true
-            exit 1
           fi
 
           echo "--> Verifying the running containers use the freshly built images..."
@@ -466,9 +460,16 @@ jobs:
             exit 1
           }
 
-          # compose up does not reload an already-running nginx when only the
-          # mounted config changed. Wait until the master process exists; a
-          # reload during apk/openssl startup used to fail this step in ~8s.
+          echo "--> Local health probe via nginx on the VPS..."
+          if ! docker exec saf-shekan-nginx wget -qO- http://127.0.0.1/api/health; then
+            echo "::error::nginx local /api/health failed after recreate"
+            docker logs saf-shekan-backend --tail 80 || true
+            docker logs saf-shekan-frontend --tail 80 || true
+            docker logs saf-shekan-nginx --tail 80 || true
+            exit 1
+          fi
+          echo ""
+
           echo "--> Reloading nginx so the mounted config is applied..."
           reloaded=0
           for attempt in $(seq 1 20); do
@@ -504,6 +505,14 @@ jobs:
       - name: Production Health Check Verification
         run: |
           set -uo pipefail
+
+          echo "--> Confirming app containers exist on the VPS..."
+          # shellcheck disable=SC2086
+          ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" \
+            "docker inspect --format '{{.Name}} {{.State.Status}} {{.Config.Image}}' \
+              saf-shekan-backend saf-shekan-frontend saf-shekan-nginx \
+            && docker ps --filter name=saf-shekan --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+
           echo "Verifying stack at https://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
           STACK_UP=false
           for i in $(seq 1 40); do
@@ -523,11 +532,13 @@ jobs:
             echo "::error::Deployment health check failed"
             echo "=== Container status (via SSH, best effort) ==="
             # shellcheck disable=SC2086
-            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker ps" || true
+            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker ps -a --filter name=saf-shekan" || true
             # shellcheck disable=SC2086
             ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-frontend --tail 60" || true
             # shellcheck disable=SC2086
             ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-backend --tail 60" || true
+            # shellcheck disable=SC2086
+            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-nginx --tail 60" || true
             exit 1
           fi
 
