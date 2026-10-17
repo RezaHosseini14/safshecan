@@ -349,11 +349,31 @@ jobs:
           if ! grep -q '^ENCRYPTION_MASTER_KEY=' .env; then
             echo "ENCRYPTION_MASTER_KEY=$(openssl rand -hex 32)" >> .env
           fi
-          if ! grep -q '^JWT_ACCESS_SECRET=' .env; then
+          if ! grep -q '^JWT_ACCESS_SECRET=.\+' .env; then
+            sed -i '/^JWT_ACCESS_SECRET=/d' .env || true
             echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> .env
           fi
-          if ! grep -q '^JWT_REFRESH_SECRET=' .env; then
+          if ! grep -q '^JWT_REFRESH_SECRET=.\+' .env; then
+            sed -i '/^JWT_REFRESH_SECRET=/d' .env || true
             echo "JWT_REFRESH_SECRET=$(openssl rand -base64 48)" >> .env
+          fi
+          # Persistent Ed25519 keys (PEM with \n escapes — see crypto-keys.service.ts).
+          # Without these, every recreate mints ephemeral keys and wipes sessions.
+          if ! grep -q '^JWT_PRIVATE_KEY=.\+' .env || ! grep -q '^JWT_PUBLIC_KEY=.\+' .env; then
+            echo "--> Generating persistent JWT_PRIVATE_KEY / JWT_PUBLIC_KEY..."
+            sed -i '/^JWT_PRIVATE_KEY=/d;/^JWT_PUBLIC_KEY=/d' .env || true
+            jwt_tmp=$(mktemp -d)
+            openssl genpkey -algorithm Ed25519 -out "$jwt_tmp/private.pem"
+            openssl pkey -in "$jwt_tmp/private.pem" -pubout -out "$jwt_tmp/public.pem"
+            priv_esc=$(awk 'NF {printf "%s\\n", $0}' "$jwt_tmp/private.pem")
+            pub_esc=$(awk 'NF {printf "%s\\n", $0}' "$jwt_tmp/public.pem")
+            printf 'JWT_PRIVATE_KEY="%s"\n' "$priv_esc" >> .env
+            printf 'JWT_PUBLIC_KEY="%s"\n' "$pub_esc" >> .env
+            rm -rf "$jwt_tmp"
+          fi
+          if ! grep -q '^JWT_KEY_ID=.\+' .env; then
+            sed -i '/^JWT_KEY_ID=/d' .env || true
+            echo "JWT_KEY_ID=safshekan-ed25519-v1" >> .env
           fi
 
           # Remove legacy env keys if present
@@ -404,34 +424,51 @@ jobs:
             exit 1
           fi
 
-          recreate_app() {
-            docker compose -f docker-compose.yml up -d --pull missing --force-recreate \
-              --wait --wait-timeout 300 backend frontend nginx
+          up_one() {
+            local service="$1"
+            local timeout="$2"
+            echo "--> Starting ${service}..."
+            if docker compose -f docker-compose.yml up -d --force-recreate --wait --wait-timeout "$timeout" "$service"; then
+              return 0
+            fi
+            echo "--> ${service} failed; removing stale container_name and retrying once..."
+            docker rm -f "saf-shekan-${service}" 2>/dev/null || true
+            docker compose -f docker-compose.yml up -d --force-recreate --wait --wait-timeout "$timeout" "$service"
           }
 
-          echo "--> Recreating backend + frontend + nginx (DB left running)..."
-          if ! recreate_app; then
-            echo "--> Recreate failed (often a stale container_name). Replacing app containers once..."
-            docker rm -f saf-shekan-backend saf-shekan-frontend saf-shekan-nginx 2>/dev/null || true
-            if ! recreate_app; then
-              echo "::error::docker compose up failed for backend/frontend/nginx"
-              docker compose -f docker-compose.yml ps || true
-              docker logs saf-shekan-backend --tail 100 || true
-              docker logs saf-shekan-frontend --tail 100 || true
-              docker logs saf-shekan-nginx --tail 100 || true
+          echo "--> Recreating app tier one service at a time (DB left running)..."
+          if ! up_one backend 180; then
+            echo "::error::backend failed to become healthy"
+            docker logs saf-shekan-backend --tail 120 || true
+            exit 1
+          fi
+          if ! up_one frontend 180; then
+            echo "::error::frontend failed to become healthy"
+            docker logs saf-shekan-frontend --tail 120 || true
+            exit 1
+          fi
+          if ! up_one nginx 120; then
+            echo "::error::nginx failed to become healthy"
+            docker logs saf-shekan-nginx --tail 120 || true
+            exit 1
+          fi
+
+          echo "--> Asserting app containers exist and are running..."
+          for c in saf-shekan-backend saf-shekan-frontend saf-shekan-nginx; do
+            if ! docker ps --format '{{.Names}}' | grep -qx "$c"; then
+              echo "::error::Expected running container missing: $c"
+              docker ps -a --filter name=saf-shekan || true
               exit 1
             fi
-          fi
+          done
 
           echo "--> Verifying the running containers use the freshly built images..."
           EXPECTED_BACKEND_ID=$(docker image inspect --format '{{.Id}}' "$BACKEND_IMAGE" 2>/dev/null || echo '')
           EXPECTED_FRONTEND_ID=$(docker image inspect --format '{{.Id}}' "$FRONTEND_IMAGE" 2>/dev/null || echo '')
           RUNNING_BACKEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-backend 2>/dev/null || echo '')
           RUNNING_FRONTEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-frontend 2>/dev/null || echo '')
-          RUNNING_BACKEND_REF=$(docker inspect --format '{{.Config.Image}}' saf-shekan-backend 2>/dev/null || echo '')
-          RUNNING_FRONTEND_REF=$(docker inspect --format '{{.Config.Image}}' saf-shekan-frontend 2>/dev/null || echo '')
-          echo "    backend:  running=${RUNNING_BACKEND_ID} ref=${RUNNING_BACKEND_REF} expected=${EXPECTED_BACKEND_ID} (${BACKEND_IMAGE})"
-          echo "    frontend: running=${RUNNING_FRONTEND_ID} ref=${RUNNING_FRONTEND_REF} expected=${EXPECTED_FRONTEND_ID} (${FRONTEND_IMAGE})"
+          echo "    backend:  running=${RUNNING_BACKEND_ID} expected=${EXPECTED_BACKEND_ID} (${BACKEND_IMAGE})"
+          echo "    frontend: running=${RUNNING_FRONTEND_ID} expected=${EXPECTED_FRONTEND_ID} (${FRONTEND_IMAGE})"
           if [ -z "$RUNNING_BACKEND_ID" ] || [ "$RUNNING_BACKEND_ID" != "$EXPECTED_BACKEND_ID" ] \
             || [ -z "$RUNNING_FRONTEND_ID" ] || [ "$RUNNING_FRONTEND_ID" != "$EXPECTED_FRONTEND_ID" ]; then
             echo "::error::Running containers are not on the built images; the deployment did not take effect"
@@ -508,10 +545,24 @@ jobs:
 
           echo "--> Confirming app containers exist on the VPS..."
           # shellcheck disable=SC2086
-          ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" \
-            "docker inspect --format '{{.Name}} {{.State.Status}} {{.Config.Image}}' \
-              saf-shekan-backend saf-shekan-frontend saf-shekan-nginx \
-            && docker ps --filter name=saf-shekan --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+          ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          missing=0
+          for c in saf-shekan-backend saf-shekan-frontend saf-shekan-nginx; do
+            if docker ps --format '{{.Names}}' | grep -qx "$c"; then
+              echo "OK running: $c"
+            else
+              echo "::error::Missing running container: $c"
+              missing=1
+            fi
+          done
+          echo "=== docker ps (saf-shekan) ==="
+          docker ps -a --filter name=saf-shekan --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}'
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::App containers are not running — the rolling restart step did not leave a live stack"
+            exit 1
+          fi
+          REMOTE
 
           echo "Verifying stack at https://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
           STACK_UP=false
@@ -529,7 +580,7 @@ jobs:
           done
 
           if [ "$STACK_UP" = false ]; then
-            echo "::error::Deployment health check failed"
+            echo "::error::Deployment health check failed (port 3000 unreachable from GitHub runner)"
             echo "=== Container status (via SSH, best effort) ==="
             # shellcheck disable=SC2086
             ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker ps -a --filter name=saf-shekan" || true
