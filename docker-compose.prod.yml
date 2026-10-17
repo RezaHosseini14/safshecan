@@ -51,8 +51,8 @@ services:
     image: ${BACKEND_IMAGE}
     container_name: saf-shekan-backend
     restart: unless-stopped
-    expose:
-      - "4031:3000"
+    ports:
+      - "4030:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -98,8 +98,8 @@ services:
     image: ${FRONTEND_IMAGE}
     container_name: saf-shekan-frontend
     restart: unless-stopped
-    expose:
-      - "3000"
+    ports:
+      - "4031:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
