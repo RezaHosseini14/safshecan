@@ -294,13 +294,27 @@ jobs:
         if: steps.mode.outputs.mode == 'local'
         run: |
           set -euo pipefail
-          mkdir -p "$REMOTE_DIR/docker" "$REMOTE_DIR/data" "$REMOTE_DIR/docker/certs"
-          chown -R 1001:1001 "$REMOTE_DIR/data" 2>/dev/null || true
-          cp docker-compose.prod.yml "$REMOTE_DIR/docker-compose.yml"
-          cp docker/nginx.conf "$REMOTE_DIR/docker/nginx.conf"
-          cp scripts/ci-deploy-on-host.sh "$REMOTE_DIR/ci-deploy-on-host.sh"
-          chmod +x "$REMOTE_DIR/ci-deploy-on-host.sh"
-          test -f "$REMOTE_DIR/config.json" || printf '{}\n' > "$REMOTE_DIR/config.json"
+          # github-runner owns /opt/saf-shekan (chown once on VPS); sudo as fallback.
+          install_tree() {
+            mkdir -p "$REMOTE_DIR/docker" "$REMOTE_DIR/data" "$REMOTE_DIR/docker/certs"
+            cp docker-compose.prod.yml "$REMOTE_DIR/docker-compose.yml"
+            cp docker/nginx.conf "$REMOTE_DIR/docker/nginx.conf"
+            cp scripts/ci-deploy-on-host.sh "$REMOTE_DIR/ci-deploy-on-host.sh"
+            chmod +x "$REMOTE_DIR/ci-deploy-on-host.sh"
+            test -f "$REMOTE_DIR/config.json" || printf '{}\n' > "$REMOTE_DIR/config.json"
+            chown -R 1001:1001 "$REMOTE_DIR/data" 2>/dev/null || true
+          }
+          if ! install_tree 2>/dev/null; then
+            echo "--> Falling back to sudo for $REMOTE_DIR..."
+            sudo mkdir -p "$REMOTE_DIR/docker" "$REMOTE_DIR/data" "$REMOTE_DIR/docker/certs"
+            sudo cp docker-compose.prod.yml "$REMOTE_DIR/docker-compose.yml"
+            sudo cp docker/nginx.conf "$REMOTE_DIR/docker/nginx.conf"
+            sudo cp scripts/ci-deploy-on-host.sh "$REMOTE_DIR/ci-deploy-on-host.sh"
+            sudo chmod +x "$REMOTE_DIR/ci-deploy-on-host.sh"
+            sudo bash -c "test -f $REMOTE_DIR/config.json || printf '{}\n' > $REMOTE_DIR/config.json"
+            sudo chown -R github-runner:github-runner "$REMOTE_DIR"
+            sudo chown -R 1001:1001 "$REMOTE_DIR/data" 2>/dev/null || true
+          fi
 
       - name: Pull images & rolling restart on server
         env:
@@ -313,6 +327,7 @@ jobs:
           set -euo pipefail
           if [ "$DEPLOY_MODE" = "local" ]; then
             echo "--> Running host deploy script locally in $REMOTE_DIR"
+            # Ensure docker socket access (github-runner is in docker group).
             BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
               GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" \
               REMOTE_DIR="$REMOTE_DIR" TLS_HOST="$TLS_HOST" \
