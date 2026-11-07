@@ -2,11 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Zap } from 'lucide-react';
 import type { SniperState, TimeSyncStatus } from '@saf-shekan/core';
 import { Num } from '@/components/num';
 import { Button } from '@/components/ui/button';
+import { APP_VERSION } from '@/data/changelog';
+import { ChangelogModal } from '@/features/shell/changelog-modal';
 import { HeaderActions } from '@/features/shell/header-actions';
 import { isEngineHot } from '@/lib/engine-state';
 import { formatSignedMs, latencyClass } from '@/lib/format';
@@ -54,6 +57,7 @@ export function AppShell({
   const pathname = usePathname() || '/';
   const t = useTranslations('shell');
   const tc = useTranslations('common');
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const aside = footerAside ?? t('footerAside');
   const hot = isEngineHot(engineState);
   const sample = timeSync?.synchronized === true ? timeSync : null;
@@ -148,11 +152,24 @@ export function AppShell({
       <footer className="border-t border-white/10 bg-[#070b14]/90 px-4 py-3.5 text-[11px] text-slate-400 lg:px-8">
         <div className="mx-auto flex max-w-[1720px] flex-col items-center justify-between gap-2 sm:flex-row">
           <span>{footerNote}</span>
-          <span className="num-mono" dir="ltr">
-            {aside}
-          </span>
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="num-mono h-auto px-2 py-0.5 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+              aria-label={t('changelog.openVersion', { version: APP_VERSION })}
+              onClick={() => setChangelogOpen(true)}
+            >
+              v{APP_VERSION}
+            </Button>
+            <span className="num-mono text-slate-500" dir="ltr">
+              {aside}
+            </span>
+          </div>
         </div>
       </footer>
+      <ChangelogModal open={changelogOpen} onOpenChange={setChangelogOpen} />
     </div>
   );
 }

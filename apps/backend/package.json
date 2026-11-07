@@ -1,6 +1,6 @@
 {
   "name": "@saf-shekan/backend",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "SafShekan Backend API & High-Speed Trading Engine with NestJS",
   "type": "module",
   "main": "dist/index.js",

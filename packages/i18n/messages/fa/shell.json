@@ -30,5 +30,11 @@
   "themeLight": "تغییر پوسته به روشن",
   "footerProfile": "صف‌شکن — تنظیمات امنیت و نشست‌های فعال",
   "footerAdmin": "صف‌شکن — مدیریت دسترسی‌ها و کاربران",
-  "logout": "خروج از حساب"
+  "logout": "خروج از حساب",
+  "changelog": {
+    "title": "تغییرات نسخه",
+    "currentVersion": "نسخه فعلی:",
+    "currentVersionLabel": "نسخه فعلی",
+    "openVersion": "نسخه {version} — مشاهده تغییرات"
+  }
 }
