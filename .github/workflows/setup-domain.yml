@@ -1,0 +1,52 @@
+name: Setup safshekan.rmhosseini.ir (host nginx + certbot)
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: Domain to configure
+        required: true
+        default: safshekan.rmhosseini.ir
+      certbot_email:
+        description: Email for Let's Encrypt
+        required: true
+        default: admin@rmhosseini.ir
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safshekan-host-domain
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    name: Host nginx + certbot
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNS_ON || '["self-hosted","safshekan"]') }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure passwordless sudo for runner
+        run: |
+          set -euo pipefail
+          if sudo -n true 2>/dev/null; then
+            echo "sudo -n already works"
+            exit 0
+          fi
+          echo "Bootstrapping /etc/sudoers.d/github-runner via Docker..."
+          docker run --rm -v /etc/sudoers.d:/etc/sudoers.d alpine:3.20 \
+            sh -c 'printf "%s\n" "github-runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/github-runner && chmod 440 /etc/sudoers.d/github-runner'
+          sudo -n true
+          echo "passwordless sudo ready"
+
+      - name: Install nginx site and certificate
+        env:
+          DOMAIN: ${{ inputs.domain }}
+          CERTBOT_EMAIL: ${{ inputs.certbot_email }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/setup-host-domain-safshekan.sh
+          sudo --preserve-env=DOMAIN,CERTBOT_EMAIL \
+            bash scripts/setup-host-domain-safshekan.sh

@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const SERVER_HOST = process.env.SSH_HOST || '5.159.49.36';
+const SERVER_HOST = process.env.SSH_HOST || '109.70.78.80';
 const SERVER_PORT = String(process.env.SSH_PORT || 22);
 const SERVER_USER = process.env.SSH_USER || 'root';
 const REMOTE_PATH = '/opt/saf-shekan';
@@ -182,15 +182,15 @@ async function main() {
     set -euo pipefail
     STACK_UP=false
     for i in $(seq 1 40); do
-      if curl -sf http://127.0.0.1:3000/api/health >/dev/null \
-        && curl -sf http://127.0.0.1:3000 >/dev/null; then
+      if curl -sfk https://127.0.0.1:2032/api/health >/dev/null \
+        && curl -sfk https://127.0.0.1:2032 >/dev/null; then
         STACK_UP=true
         echo "Stack healthy on attempt $i"
-        curl -s http://127.0.0.1:3000/api/health
+        curl -sk https://127.0.0.1:2032/api/health
         echo ""
         break
       fi
-      echo "Waiting for nginx :3000... ($i/40)"
+      echo "Waiting for nginx :2032... ($i/40)"
       sleep 3
     done
     if [ "$STACK_UP" = false ]; then
@@ -212,10 +212,11 @@ async function main() {
 
   console.log('\n=============================================================');
   console.log('SafShekan Successfully Deployed to Production!');
-  console.log(`Frontend:       http://${SERVER_HOST}:3000`);
-  console.log(`Backend Engine: http://${SERVER_HOST}:3000/api/status`);
-  console.log(`API Swagger:    http://${SERVER_HOST}:3000/api/docs`);
-  console.log(`Health:         http://${SERVER_HOST}:3000/api/health`);
+  console.log(`Frontend:       https://safshekan.rmhosseini.ir`);
+  console.log(`Backend Engine: https://safshekan.rmhosseini.ir/api/status`);
+  console.log(`API Swagger:    https://safshekan.rmhosseini.ir/api/docs`);
+  console.log(`Health:         https://safshekan.rmhosseini.ir/api/health`);
+  console.log(`Docker gateway: https://${SERVER_HOST}:2032`);
   console.log('=============================================================\n');
 }
 

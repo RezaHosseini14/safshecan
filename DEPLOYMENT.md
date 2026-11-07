@@ -8,40 +8,58 @@
 
 ```mermaid
 flowchart TD
-  Browser["مرورگر کاربر (HTTPS)"] -->|":3000"| Nginx["Nginx Gateway (TLS)"]
-  Nginx -->|"/"| Frontend["Next.js 16 (apps/frontend)"]
-  Nginx -->|"/api /ws"| Backend["NestJS 12 (apps/backend)"]
-  
+  Browser["مرورگر کاربر (HTTPS)"] -->|Cloudflare| HostNginx["Host nginx :443 + Let's Encrypt"]
+  HostNginx -->|"/"| Frontend["Next.js 16 :2031"]
+  HostNginx -->|"/api /ws"| Backend["NestJS 12 :2030"]
+  Browser -.->|":2032 docker gateway"| DockerNginx["Docker nginx TLS"]
+
   subgraph DockerNetwork ["شبکه ایزوله داخلی (safshekan-net)"]
     Frontend
     Backend
-    Postgres[("PostgreSQL 17\n(ACID Persistence & Audits)")]
-    Redis[("Redis 7\n(Locking, Queues, Cache)")]
-    
-    Backend -->|"Drizzle ORM (5432)"| Postgres
-    Backend -->|"BullMQ & Locks (6379)"| Redis
+    DockerNginx
+    Postgres[("PostgreSQL 17")]
+    Redis[("Redis 7")]
+    Backend -->|"Drizzle ORM"| Postgres
+    Backend -->|"BullMQ & Locks"| Redis
   end
 ```
 
 | سرویس | آدرس و دسترسی | نقش و توضیحات |
 |---|---|---|
-| **nginx** | تنها پورت عمومی `:3000` | Gateway عمومی با TLS، پروکسی `/api` و `/ws` به backend و `/` به frontend |
-| **frontend** | داخلی `frontend:3000` | رابط کاربری Next.js 16 با توکن‌های شیشه‌ای و کامپوننت‌های رادیکس |
-| **backend** | داخلی `backend:3000` | موتور سرخطی، احراز هویت بدون وضعیت، صف Undici و درگاه وب‌سوکت |
-| **postgres** | داخلی `postgres:5432` | پایگاه‌داده رابطه ای PostgreSQL 17 با والیوم `safshekan_pgdata` |
-| **redis** | داخلی `redis:6379` | ردیس ۷ برای قفل توزیع‌شده با توکن فنسینگ، صف BullMQ، ریت‌لیمیتینگ و کش |
+| **host nginx** | `https://safshekan.rmhosseini.ir` | TLS عمومی (certbot) → پروکسی به `:2030` / `:2031` |
+| **docker nginx** | host `:2032` | Gateway داخلی TLS؛ پروکسی `/api`+`/ws` و `/` |
+| **frontend** | host `:2031` → `frontend:3000` | Next.js 16 |
+| **backend** | host `:2030` → `backend:3000` | NestJS 12 موتور سرخطی |
+| **postgres** | داخلی `postgres:5432` | PostgreSQL 17 |
+| **redis** | داخلی `redis:6379` | Redis 7 |
 
 ---
 
 ## مشخصات سرور و پورت‌ها
 
-- **آدرس سرور:** `5.159.49.36`
-- **پورت عمومی:** `https://5.159.49.36:3000`
-- **مستندات Swagger:** `https://5.159.49.36:3000/api/docs`
-- **Health Check:** `https://5.159.49.36:3000/api/health`
-- **Ready Check:** `https://5.159.49.36:3000/api/ready`
-- **Restricted Metrics:** `https://5.159.49.36:3000/api/metrics` (محدود به آی‌پی‌های داخلی، توکن یا دسترسی ادمین)
+- **آدرس سرور:** `109.70.78.80`
+- **دامنه عمومی:** `https://safshekan.rmhosseini.ir`
+- **Docker gateway:** `https://109.70.78.80:2032`
+- **Direct:** backend `:2030`، frontend `:2031`
+- **مستندات Swagger:** `https://safshekan.rmhosseini.ir/api/docs`
+- **Health Check:** `https://safshekan.rmhosseini.ir/api/health`
+- **Ready Check:** `https://safshekan.rmhosseini.ir/api/ready`
 - **مسیر پروژه در سرور:** `/opt/saf-shekan`
+
+### دامنه + certbot (host nginx)
+
+```bash
+sudo DOMAIN=safshekan.rmhosseini.ir CERTBOT_EMAIL=admin@rmhosseini.ir \
+  bash scripts/setup-host-domain-safshekan.sh
+```
+
+یا workflow دستی **Setup safshekan.rmhosseini.ir**. Cloudflare SSL: **Full (strict)**.
+
+### Self-hosted runner
+
+اگر GitHub نتواند به VPS SSH بزند: runner روی VPS با لیبل‌های `self-hosted,safshekan` و متغیر ریپو:
+
+`DEPLOY_RUNS_ON=["self-hosted","safshekan"]`
 
 ---
 
@@ -79,7 +97,11 @@ JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 
 # محافظت CSRF
-CSRF_ALLOWED_ORIGINS=https://5.159.49.36:3000
+CSRF_ALLOWED_ORIGINS=https://safshekan.rmhosseini.ir
+BACKEND_PORT=2030
+FRONTEND_PORT=2031
+NGINX_PORT=2032
+APP_URL=https://safshekan.rmhosseini.ir
 
 # پایش و متریک‌ها
 METRICS_AUTH_TOKEN=your_secure_internal_metrics_bearer_token
@@ -93,10 +115,12 @@ METRICS_AUTH_TOKEN=your_secure_internal_metrics_bearer_token
 
 | نام Secret | مقدار | الزامی |
 |---|---|---|
-| `SSH_HOST` | `5.159.49.36` | اگر خالی باشد همین آدرس استفاده می‌شود |
+| `SSH_HOST` | `109.70.78.80` | اگر خالی باشد همین آدرس استفاده می‌شود |
 | `SSH_USER` | `root` | اگر خالی باشد `root` استفاده می‌شود |
-| `SSH_PRIVATE_KEY` | محتوای کلید خصوصی Ed25519 | بله |
+| `SSH_PRIVATE_KEY` | محتوای کلید خصوصی Ed25519 | برای حالت SSH |
+| `TLS_HOST` | `safshekan.rmhosseini.ir` | دامنه عمومی |
 | `GHCR_PULL_TOKEN` | PAT با scope `read:packages` | اختیاری |
+| `DEPLOY_RUNS_ON` (variable) | `["self-hosted","safshekan"]` | دیپلوی روی runner داخل VPS |
 
 ---
 
@@ -238,7 +262,9 @@ pnpm run deploy:remote
 
 ### ۳. بررسی سلامت بعد از دیپلوی (Smoke Test)
 ```bash
-curl -kf https://5.159.49.36:3000/api/health
-curl -kf https://5.159.49.36:3000/api/ready
-curl -kf https://5.159.49.36:3000/
+curl -kf https://safshekan.rmhosseini.ir/api/health
+curl -kf https://safshekan.rmhosseini.ir/api/ready
+curl -kf https://safshekan.rmhosseini.ir/
+# or docker gateway:
+curl -kf https://109.70.78.80:2032/api/health
 ```

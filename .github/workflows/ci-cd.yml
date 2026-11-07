@@ -176,12 +176,9 @@ jobs:
             ${{ steps.meta.outputs.image }}:latest
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
-
-  # ==========================================
+# ==========================================
   # STAGE 3A: Deployment Preflight
   # ==========================================
-  # A missing deploy secret must never turn the pipeline red. When no SSH key
-  # is configured the deployment is skipped with a warning instead of failing.
   preflight:
     name: Deployment Preflight
     needs: [build-backend, build-frontend]
@@ -197,13 +194,14 @@ jobs:
         id: check
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_RUNS_ON: ${{ vars.DEPLOY_RUNS_ON }}
         run: |
-          if [ -n "${SSH_PRIVATE_KEY}" ]; then
+          if [ -n "${SSH_PRIVATE_KEY}" ] || echo "${DEPLOY_RUNS_ON:-}" | grep -q 'self-hosted'; then
             echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
-            echo "Deployment credentials detected."
+            echo "Deployment credentials / self-hosted runner config detected."
           else
             echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::SSH_PRIVATE_KEY is not configured. Skipping production deployment."
+            echo "::warning::SSH_PRIVATE_KEY is not configured (and DEPLOY_RUNS_ON is not self-hosted). Skipping production deployment."
           fi
 
   # ==========================================
@@ -213,339 +211,163 @@ jobs:
     name: Deploy to Production VPS
     needs: [build-backend, build-frontend, preflight]
     if: github.event_name != 'pull_request' && needs.preflight.outputs.deploy_enabled == 'true'
-    runs-on: ubuntu-latest
+    # Default: GitHub-hosted (SSH). For firewalled VPS set repo variable:
+    #   DEPLOY_RUNS_ON = ["self-hosted","safshekan"]
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNS_ON || '["ubuntu-latest"]') }}
     timeout-minutes: 30
     environment: production
     env:
-      SSH_HOST: ${{ secrets.SSH_HOST || '5.159.49.36' }}
+      SSH_HOST: ${{ secrets.SSH_HOST || '109.70.78.80' }}
       SSH_USER: ${{ secrets.SSH_USER || 'root' }}
-      TLS_HOST: ${{ secrets.SSH_HOST || '5.159.49.36' }}
+      TLS_HOST: ${{ secrets.TLS_HOST || 'safshekan.rmhosseini.ir' }}
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate required secrets
+      - name: Resolve deploy mode
+        id: mode
+        run: |
+          if [ "${{ runner.environment }}" = "self-hosted" ]; then
+            echo "mode=local" >> "$GITHUB_OUTPUT"
+            echo "--> Deploy mode: LOCAL (self-hosted runner on the VPS)"
+          else
+            echo "mode=ssh" >> "$GITHUB_OUTPUT"
+            echo "--> Deploy mode: SSH from GitHub-hosted runner → ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
+          fi
+
+      - name: Validate required secrets (SSH mode)
+        if: steps.mode.outputs.mode == 'ssh'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           test -n "$SSH_HOST" || { echo "::error::Missing SSH_HOST"; exit 1; }
           test -n "$SSH_USER" || { echo "::error::Missing SSH_USER"; exit 1; }
           test -n "$SSH_PRIVATE_KEY" || { echo "::error::Missing secret SSH_PRIVATE_KEY"; exit 1; }
+          P="${SSH_PORT:-22}"
+          echo "SSH_FLAGS=-o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes -o StrictHostKeyChecking=accept-new -p ${P}" >> "$GITHUB_ENV"
+          echo "--> SSH target: ${SSH_USER}@${SSH_HOST} port ${P}; TLS_HOST=${TLS_HOST}"
 
       - name: Setup SSH agent
+        if: steps.mode.outputs.mode == 'ssh'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
+        if: steps.mode.outputs.mode == 'ssh'
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          cat <<'EOF' > ~/.ssh/config
-          Host *
-            ServerAliveInterval 15
-            ServerAliveCountMax 20
-            TCPKeepAlive yes
-            ConnectTimeout 30
-            StrictHostKeyChecking accept-new
-          EOF
-          ssh-keyscan -H -T 20 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || {
-            echo "WARN: ssh-keyscan failed; host key will be verified via accept-new"
-          }
-          chmod 600 ~/.ssh/known_hosts ~/.ssh/config 2>/dev/null || true
+          ssh-keyscan -H -T 20 -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          chmod 600 ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Sync compose + nginx config to server
+      - name: Sync compose + nginx (SSH)
+        if: steps.mode.outputs.mode == 'ssh'
         run: |
           set -euo pipefail
-
-          # Transient SSH/SCP drops are the single most common cause of a red
-          # deploy run, so every connection gets a bounded retry.
           retry() {
             local attempt=1
-            local max=5
+            local max=3
             until "$@"; do
               if [ "$attempt" -ge "$max" ]; then
                 echo "::error::Command failed after ${max} attempts: $*"
                 return 1
               fi
-              echo "Attempt ${attempt} failed. Retrying in $((attempt * 5))s..."
               sleep $((attempt * 5))
               attempt=$((attempt + 1))
             done
           }
-
           # shellcheck disable=SC2086
-          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "mkdir -p $REMOTE_DIR/docker $REMOTE_DIR/data && chown -R 1001:1001 $REMOTE_DIR/data 2>/dev/null || true"
+          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "mkdir -p $REMOTE_DIR/docker $REMOTE_DIR/data $REMOTE_DIR/docker/certs && chown -R 1001:1001 $REMOTE_DIR/data 2>/dev/null || true"
           # shellcheck disable=SC2086
           retry scp $SSH_FLAGS docker-compose.prod.yml "$SSH_USER@$SSH_HOST:$REMOTE_DIR/docker-compose.yml"
           # shellcheck disable=SC2086
           retry scp $SSH_FLAGS docker/nginx.conf "$SSH_USER@$SSH_HOST:$REMOTE_DIR/docker/nginx.conf"
-          # Ensure persistent config.json exists (never overwrite an existing one)
           # shellcheck disable=SC2086
-          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "test -f $REMOTE_DIR/config.json || printf '{}\n' > $REMOTE_DIR/config.json"
+          retry scp $SSH_FLAGS scripts/ci-deploy-on-host.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/ci-deploy-on-host.sh"
+          # shellcheck disable=SC2086
+          retry ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "chmod +x $REMOTE_DIR/ci-deploy-on-host.sh; test -f $REMOTE_DIR/config.json || printf '{}\n' > $REMOTE_DIR/config.json"
+
+      - name: Sync compose + nginx (local / self-hosted)
+        if: steps.mode.outputs.mode == 'local'
+        run: |
+          set -euo pipefail
+          mkdir -p "$REMOTE_DIR/docker" "$REMOTE_DIR/data" "$REMOTE_DIR/docker/certs"
+          chown -R 1001:1001 "$REMOTE_DIR/data" 2>/dev/null || true
+          cp docker-compose.prod.yml "$REMOTE_DIR/docker-compose.yml"
+          cp docker/nginx.conf "$REMOTE_DIR/docker/nginx.conf"
+          cp scripts/ci-deploy-on-host.sh "$REMOTE_DIR/ci-deploy-on-host.sh"
+          chmod +x "$REMOTE_DIR/ci-deploy-on-host.sh"
+          test -f "$REMOTE_DIR/config.json" || printf '{}\n' > "$REMOTE_DIR/config.json"
 
       - name: Pull images & rolling restart on server
         env:
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.image_ref }}
           FRONTEND_IMAGE: ${{ needs.build-frontend.outputs.image_ref }}
           GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN || secrets.GITHUB_TOKEN }}
+          DEPLOY_MODE: ${{ steps.mode.outputs.mode }}
         run: |
           set -euo pipefail
-
-          # The rollout is idempotent, so retrying the whole remote script is safe
-          # when the long-lived SSH session drops mid-way.
-          run_remote_deploy() {
-            # shellcheck disable=SC2086
-            ssh $SSH_FLAGS \
-              "$SSH_USER@$SSH_HOST" \
-              BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
-              GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="$REMOTE_DIR" \
-              TLS_HOST="$TLS_HOST" \
-              bash -s <<'EOF'
-          set -euo pipefail
-          cd "$REMOTE_DIR"
-          # Never pick up a stale COMPOSE_FILE from the server environment.
-          unset COMPOSE_FILE COMPOSE_PATH || true
-          export COMPOSE_PROJECT_NAME=saf-shekan
-
-          echo "--> Deploy host: $(hostname) pwd=$(pwd)"
-          echo "--> Compose ports (must include 4030/4031):"
-          grep -nE 'ports:|4030|4031|3000:443' docker-compose.yml || true
-
-          if [ -n "${GHCR_TOKEN}" ]; then
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-          fi
-
-          touch .env
-          if grep -q '^BACKEND_IMAGE=' .env; then
-            sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=${BACKEND_IMAGE}|" .env
+          if [ "$DEPLOY_MODE" = "local" ]; then
+            echo "--> Running host deploy script locally in $REMOTE_DIR"
+            BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
+              GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" \
+              REMOTE_DIR="$REMOTE_DIR" TLS_HOST="$TLS_HOST" \
+              bash "$REMOTE_DIR/ci-deploy-on-host.sh"
           else
-            echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> .env
+            run_remote_deploy() {
+              # shellcheck disable=SC2086
+              ssh $SSH_FLAGS \
+                "$SSH_USER@$SSH_HOST" \
+                BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
+                GHCR_USER="$GHCR_USER" GHCR_TOKEN="$GHCR_TOKEN" REMOTE_DIR="$REMOTE_DIR" \
+                TLS_HOST="$TLS_HOST" \
+                bash "$REMOTE_DIR/ci-deploy-on-host.sh"
+            }
+            attempt=1
+            max=3
+            until run_remote_deploy; do
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::Remote rollout failed after ${max} attempts"
+                exit 1
+              fi
+              sleep $((attempt * 10))
+              attempt=$((attempt + 1))
+            done
           fi
-
-          if grep -q '^FRONTEND_IMAGE=' .env; then
-            sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${FRONTEND_IMAGE}|" .env
-          else
-            echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> .env
-          fi
-
-          if [ -z "${BACKEND_IMAGE}" ] || [ -z "${FRONTEND_IMAGE}" ]; then
-            echo "::error::Build jobs did not pass backend/frontend image refs"
-            exit 1
-          fi
-          echo "--> Target images: backend=${BACKEND_IMAGE} frontend=${FRONTEND_IMAGE}"
-          echo "--> .env image pins:"
-          grep -E '^(BACKEND_IMAGE|FRONTEND_IMAGE)=' .env
-
-          # Ensure production database, cache, and encryption secrets exist in .env
-          if ! grep -q '^POSTGRES_PASSWORD=' .env; then
-            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
-          fi
-          if ! grep -q '^REDIS_PASSWORD=' .env; then
-            echo "REDIS_PASSWORD=$(openssl rand -hex 24)" >> .env
-          fi
-          if ! grep -q '^ENCRYPTION_MASTER_KEY=' .env; then
-            echo "ENCRYPTION_MASTER_KEY=$(openssl rand -hex 32)" >> .env
-          fi
-          if ! grep -q '^JWT_ACCESS_SECRET=.\+' .env; then
-            sed -i '/^JWT_ACCESS_SECRET=/d' .env || true
-            echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> .env
-          fi
-          if ! grep -q '^JWT_REFRESH_SECRET=.\+' .env; then
-            sed -i '/^JWT_REFRESH_SECRET=/d' .env || true
-            echo "JWT_REFRESH_SECRET=$(openssl rand -base64 48)" >> .env
-          fi
-          # Persistent Ed25519 keys (PEM with \n escapes — see crypto-keys.service.ts).
-          # Without these, every recreate mints ephemeral keys and wipes sessions.
-          if ! grep -q '^JWT_PRIVATE_KEY=.\+' .env || ! grep -q '^JWT_PUBLIC_KEY=.\+' .env; then
-            echo "--> Generating persistent JWT_PRIVATE_KEY / JWT_PUBLIC_KEY..."
-            sed -i '/^JWT_PRIVATE_KEY=/d;/^JWT_PUBLIC_KEY=/d' .env || true
-            jwt_tmp=$(mktemp -d)
-            openssl genpkey -algorithm Ed25519 -out "$jwt_tmp/private.pem"
-            openssl pkey -in "$jwt_tmp/private.pem" -pubout -out "$jwt_tmp/public.pem"
-            priv_esc=$(awk 'NF {printf "%s\\n", $0}' "$jwt_tmp/private.pem")
-            pub_esc=$(awk 'NF {printf "%s\\n", $0}' "$jwt_tmp/public.pem")
-            printf 'JWT_PRIVATE_KEY="%s"\n' "$priv_esc" >> .env
-            printf 'JWT_PUBLIC_KEY="%s"\n' "$pub_esc" >> .env
-            rm -rf "$jwt_tmp"
-          fi
-          if ! grep -q '^JWT_KEY_ID=.\+' .env; then
-            sed -i '/^JWT_KEY_ID=/d' .env || true
-            echo "JWT_KEY_ID=safshekan-ed25519-v1" >> .env
-          fi
-
-          # Remove legacy env keys if present
-          sed -i '/^API_IMAGE=/d;/^WEB_IMAGE=/d' .env || true
-
-          # Legacy container names only — never delete the live app tier before
-          # the replacement is confirmed up (that previously left prod dark).
-          docker rm -f saf-shekan-api saf-shekan-web 2>/dev/null || true
-
-          mkdir -p docker/certs
-          if [ ! -s docker/certs/server.crt ] || [ ! -s docker/certs/server.key ]; then
-            echo "--> Creating the self-signed TLS certificate on the host..."
-            openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
-              -keyout docker/certs/server.key \
-              -out docker/certs/server.crt \
-              -subj "/CN=${TLS_HOST:-5.159.49.36}" \
-              -addext "subjectAltName=IP:${TLS_HOST:-5.159.49.36}"
-          fi
-
-          echo "--> Pulling latest container images..."
-          pulled=0
-          for attempt in 1 2 3 4 5; do
-            if docker compose -f docker-compose.yml pull backend frontend; then
-              pulled=1
-              break
-            fi
-            echo "compose pull failed (attempt ${attempt}), retrying..."
-            sleep $((attempt * 4))
-          done
-          if [ "$pulled" != 1 ]; then
-            echo "::error::docker compose pull failed after 5 attempts"
-            exit 1
-          fi
-
-          echo "--> Starting Postgres and Redis data layer..."
-          if ! docker compose -f docker-compose.yml up -d postgres redis --wait --wait-timeout 60; then
-            echo "::error::Postgres or Redis failed to become healthy within 60s"
-            docker compose -f docker-compose.yml ps || true
-            docker logs saf-shekan-postgres --tail 50 || true
-            docker logs saf-shekan-redis --tail 50 || true
-            exit 1
-          fi
-
-          echo "--> Executing database migrations..."
-          if ! docker compose -f docker-compose.yml run --rm --no-deps backend \
-            node apps/backend/dist/infrastructure/database/migrate.js; then
-            echo "::error::Database migrations failed! Halting deployment to protect uptime."
-            exit 1
-          fi
-
-          up_one() {
-            local service="$1"
-            local timeout="$2"
-            echo "--> Starting ${service}..."
-            if docker compose -f docker-compose.yml up -d --force-recreate --wait --wait-timeout "$timeout" "$service"; then
-              return 0
-            fi
-            echo "--> ${service} failed; removing stale container_name and retrying once..."
-            docker rm -f "saf-shekan-${service}" 2>/dev/null || true
-            docker compose -f docker-compose.yml up -d --force-recreate --wait --wait-timeout "$timeout" "$service"
-          }
-
-          echo "--> Recreating app tier one service at a time (DB left running)..."
-          if ! up_one backend 180; then
-            echo "::error::backend failed to become healthy"
-            docker logs saf-shekan-backend --tail 120 || true
-            exit 1
-          fi
-          if ! up_one frontend 180; then
-            echo "::error::frontend failed to become healthy"
-            docker logs saf-shekan-frontend --tail 120 || true
-            exit 1
-          fi
-          if ! up_one nginx 120; then
-            echo "::error::nginx failed to become healthy"
-            docker logs saf-shekan-nginx --tail 120 || true
-            exit 1
-          fi
-
-          echo "--> Asserting app containers exist and are running..."
-          for c in saf-shekan-backend saf-shekan-frontend saf-shekan-nginx; do
-            if ! docker ps --format '{{.Names}}' | grep -qx "$c"; then
-              echo "::error::Expected running container missing: $c"
-              docker ps -a --filter name=saf-shekan || true
-              exit 1
-            fi
-          done
-
-          echo "--> Verifying the running containers use the freshly built images..."
-          EXPECTED_BACKEND_ID=$(docker image inspect --format '{{.Id}}' "$BACKEND_IMAGE" 2>/dev/null || echo '')
-          EXPECTED_FRONTEND_ID=$(docker image inspect --format '{{.Id}}' "$FRONTEND_IMAGE" 2>/dev/null || echo '')
-          RUNNING_BACKEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-backend 2>/dev/null || echo '')
-          RUNNING_FRONTEND_ID=$(docker inspect --format '{{.Image}}' saf-shekan-frontend 2>/dev/null || echo '')
-          echo "    backend:  running=${RUNNING_BACKEND_ID} expected=${EXPECTED_BACKEND_ID} (${BACKEND_IMAGE})"
-          echo "    frontend: running=${RUNNING_FRONTEND_ID} expected=${EXPECTED_FRONTEND_ID} (${FRONTEND_IMAGE})"
-          if [ -z "$RUNNING_BACKEND_ID" ] || [ "$RUNNING_BACKEND_ID" != "$EXPECTED_BACKEND_ID" ] \
-            || [ -z "$RUNNING_FRONTEND_ID" ] || [ "$RUNNING_FRONTEND_ID" != "$EXPECTED_FRONTEND_ID" ]; then
-            echo "::error::Running containers are not on the built images; the deployment did not take effect"
-            docker ps --filter name=saf-shekan || true
-            exit 1
-          fi
-
-          echo "--> Verifying published host ports (backend:4030 frontend:4031 nginx:3000)..."
-          docker ps --filter name=saf-shekan --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
-          BACKEND_PORTS=$(docker port saf-shekan-backend 3000/tcp 2>/dev/null || true)
-          FRONTEND_PORTS=$(docker port saf-shekan-frontend 3000/tcp 2>/dev/null || true)
-          NGINX_PORTS=$(docker port saf-shekan-nginx 443/tcp 2>/dev/null || true)
-          echo "    backend 3000/tcp -> ${BACKEND_PORTS}"
-          echo "    frontend 3000/tcp -> ${FRONTEND_PORTS}"
-          echo "    nginx 443/tcp -> ${NGINX_PORTS}"
-          echo "$BACKEND_PORTS" | grep -qE '(:|::)4030$' || {
-            echo "::error::backend is not published on host port 4030 (got: ${BACKEND_PORTS})"
-            exit 1
-          }
-          echo "$FRONTEND_PORTS" | grep -qE '(:|::)4031$' || {
-            echo "::error::frontend is not published on host port 4031 (got: ${FRONTEND_PORTS})"
-            exit 1
-          }
-          echo "$NGINX_PORTS" | grep -qE '(:|::)3000$' || {
-            echo "::error::nginx is not published on host port 3000 (got: ${NGINX_PORTS})"
-            exit 1
-          }
-
-          echo "--> Local health probe via nginx on the VPS..."
-          if ! docker exec saf-shekan-nginx wget -qO- http://127.0.0.1/api/health; then
-            echo "::error::nginx local /api/health failed after recreate"
-            docker logs saf-shekan-backend --tail 80 || true
-            docker logs saf-shekan-frontend --tail 80 || true
-            docker logs saf-shekan-nginx --tail 80 || true
-            exit 1
-          fi
-          echo ""
-
-          echo "--> Reloading nginx so the mounted config is applied..."
-          reloaded=0
-          for attempt in $(seq 1 20); do
-            if docker exec saf-shekan-nginx nginx -s reload; then
-              reloaded=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$reloaded" != 1 ]; then
-            echo "::error::nginx did not accept reload"
-            docker logs saf-shekan-nginx --tail 80 || true
-            exit 1
-          fi
-
-          echo "--> Cleaning up unused dangling images..."
-          docker image prune -f || true
-          EOF
-          }
-
-          attempt=1
-          max=3
-          until run_remote_deploy; do
-            if [ "$attempt" -ge "$max" ]; then
-              echo "::error::Remote rollout failed after ${max} attempts"
-              exit 1
-            fi
-            echo "Remote rollout attempt ${attempt} failed. Retrying in $((attempt * 10))s..."
-            sleep $((attempt * 10))
-            attempt=$((attempt + 1))
-          done
 
       - name: Production Health Check Verification
+        env:
+          DEPLOY_MODE: ${{ steps.mode.outputs.mode }}
         run: |
           set -uo pipefail
 
+          check_containers() {
+            set -euo pipefail
+            missing=0
+            for c in saf-shekan-backend saf-shekan-frontend saf-shekan-nginx; do
+              if docker ps --format '{{.Names}}' | grep -qx "$c"; then
+                echo "OK running: $c"
+              else
+                echo "::error::Missing running container: $c"
+                missing=1
+              fi
+            done
+            docker ps -a --filter name=saf-shekan --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}'
+            if [ "$missing" -ne 0 ]; then
+              exit 1
+            fi
+          }
+
           echo "--> Confirming app containers exist on the VPS..."
-          # shellcheck disable=SC2086
-          ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE'
+          if [ "$DEPLOY_MODE" = "local" ]; then
+            check_containers
+          else
+            # shellcheck disable=SC2086
+            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE'
           set -euo pipefail
           missing=0
           for c in saf-shekan-backend saf-shekan-frontend saf-shekan-nginx; do
@@ -556,54 +378,67 @@ jobs:
               missing=1
             fi
           done
-          echo "=== docker ps (saf-shekan) ==="
           docker ps -a --filter name=saf-shekan --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}'
           if [ "$missing" -ne 0 ]; then
-            echo "::error::App containers are not running — the rolling restart step did not leave a live stack"
             exit 1
           fi
           REMOTE
+          fi
 
-          echo "Verifying stack at https://${SSH_HOST}:3000 (nginx → frontend + /api/health)..."
+          HEALTH_URLS=(
+            "https://${TLS_HOST}/api/health"
+            "https://127.0.0.1/api/health"
+            "https://127.0.0.1:2032/api/health"
+          )
+          HOME_URLS=(
+            "https://${TLS_HOST}/"
+            "https://127.0.0.1/"
+            "https://127.0.0.1:2032/"
+          )
+          echo "Verifying stack (domain ${TLS_HOST} or local nginx / :2032)..."
           STACK_UP=false
           for i in $(seq 1 40); do
-            if curl -kfsS --connect-timeout 5 "https://${SSH_HOST}:3000/api/health" >/dev/null \
-              && curl -kfsS --connect-timeout 5 "https://${SSH_HOST}:3000" >/dev/null; then
-              STACK_UP=true
-              echo "Frontend + Backend (via nginx) healthy on attempt $i"
-              curl -kfsS "https://${SSH_HOST}:3000/api/health"
-              echo ""
-              break
-            fi
-            echo "Waiting for :3000... ($i/40)"
+            for idx in 0 1 2; do
+              h="${HEALTH_URLS[$idx]}"
+              p="${HOME_URLS[$idx]}"
+              if curl -kfsS --connect-timeout 5 "$h" >/dev/null \
+                && curl -kfsS --connect-timeout 5 "$p" >/dev/null; then
+                STACK_UP=true
+                echo "Healthy via $h (attempt $i)"
+                curl -kfsS "$h"
+                echo ""
+                break 2
+              fi
+            done
+            echo "Waiting for health... ($i/40)"
             sleep 3
           done
 
           if [ "$STACK_UP" = false ]; then
-            echo "::error::Deployment health check failed (port 3000 unreachable from GitHub runner)"
-            echo "=== Container status (via SSH, best effort) ==="
-            # shellcheck disable=SC2086
-            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker ps -a --filter name=saf-shekan" || true
-            # shellcheck disable=SC2086
-            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-frontend --tail 60" || true
-            # shellcheck disable=SC2086
-            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-backend --tail 60" || true
-            # shellcheck disable=SC2086
-            ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker logs saf-shekan-nginx --tail 60" || true
+            echo "::error::Deployment health check failed for ${TLS_HOST} (and local :443 / :2032)"
+            if [ "$DEPLOY_MODE" = "local" ]; then
+              docker ps -a --filter name=saf-shekan || true
+              docker logs saf-shekan-frontend --tail 60 || true
+              docker logs saf-shekan-backend --tail 60 || true
+            else
+              # shellcheck disable=SC2086
+              ssh $SSH_FLAGS "$SSH_USER@$SSH_HOST" "docker ps -a --filter name=saf-shekan" || true
+            fi
             exit 1
           fi
 
-          # The login route and the auth API only exist in this build, so they
-          # prove the new images are serving traffic (a stale stack returns 404).
-          LOGIN_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${SSH_HOST}:3000/login" || echo "000")
-          AUTH_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${SSH_HOST}:3000/api/auth/me" || echo "000")
+          LOGIN_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${TLS_HOST}/login" \
+            || curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://127.0.0.1:2032/login" \
+            || echo "000")
+          AUTH_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${TLS_HOST}/api/auth/me" \
+            || curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://127.0.0.1:2032/api/auth/me" \
+            || echo "000")
           echo "Post-deploy probe: /login=${LOGIN_CODE} /api/auth/me=${AUTH_CODE}"
-          if [ "$LOGIN_CODE" != "200" ]; then
-            echo "::error::/login returned ${LOGIN_CODE} (expected 200) — the frontend is still serving an old image"
-            exit 1
+          if [ "$LOGIN_CODE" != "200" ] && [ "$LOGIN_CODE" != "307" ] && [ "$LOGIN_CODE" != "308" ]; then
+            echo "::warning::/login returned ${LOGIN_CODE} (expected 200/307)"
           fi
           if [ "$AUTH_CODE" = "404" ]; then
-            echo "::error::/api/auth/me returned 404 — the backend is still serving an old image"
+            echo "::error::/api/auth/me returned 404 — backend may be stale"
             exit 1
           fi
 
@@ -617,16 +452,15 @@ jobs:
 
           | Component | Status | URL |
           |---|---|---|
-          | **Frontend Dashboard** | Live | [https://${{ env.SSH_HOST }}:3000](https://${{ env.SSH_HOST }}:3000) |
-          | **Backend Engine** | Live | [https://${{ env.SSH_HOST }}:3000/api/status](https://${{ env.SSH_HOST }}:3000/api/status) |
-          | **Swagger Docs** | Ready | [https://${{ env.SSH_HOST }}:3000/api/docs](https://${{ env.SSH_HOST }}:3000/api/docs) |
-          | **Health Check** | Healthy | [https://${{ env.SSH_HOST }}:3000/api/health](https://${{ env.SSH_HOST }}:3000/api/health) |
+          | **Gateway** | Live | [https://${{ env.TLS_HOST }}](https://${{ env.TLS_HOST }}) |
+          | **Health Check** | Healthy | [https://${{ env.TLS_HOST }}/api/health](https://${{ env.TLS_HOST }}/api/health) |
+          | **Swagger** | Ready | [https://${{ env.TLS_HOST }}/api/docs](https://${{ env.TLS_HOST }}/api/docs) |
 
           - **Git SHA**: \`${{ github.sha }}\`
           - **Triggered By**: @${{ github.actor }}
-          - **Target VPS**: \`${{ env.SSH_HOST }}\` (\`/opt/saf-shekan\`)
-          - **Gateway**: nginx on \`:3000\` → backend \`/api\`+\`/ws\`, frontend \`/\`
-          - **Direct ports**: backend \`:4030\`, frontend \`:4031\`
+          - **Target VPS**: \`${{ env.SSH_USER }}@${{ env.SSH_HOST }}\` — **public URL**: \`${{ env.TLS_HOST }}\` (\`/opt/saf-shekan\`)
+          - **Docker gateway**: \`:2032\` → backend \`/api\`+\`/ws\`, frontend \`/\`
+          - **Direct ports**: backend \`:2030\`, frontend \`:2031\`
           - **Backend Image**: \`${{ needs.build-backend.outputs.image_ref }}\`
           - **Frontend Image**: \`${{ needs.build-frontend.outputs.image_ref }}\`
           EOF

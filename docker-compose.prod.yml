@@ -52,7 +52,7 @@ services:
     container_name: saf-shekan-backend
     restart: unless-stopped
     ports:
-      - "4030:3000"
+      - "${BACKEND_PORT:-2030}:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -99,7 +99,7 @@ services:
     container_name: saf-shekan-frontend
     restart: unless-stopped
     ports:
-      - "4031:3000"
+      - "${FRONTEND_PORT:-2031}:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -128,7 +128,7 @@ services:
     container_name: saf-shekan-nginx
     restart: unless-stopped
     ports:
-      - "3000:443"
+      - "${NGINX_PORT:-2032}:443"
     volumes:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/certs:/etc/nginx/certs:ro
