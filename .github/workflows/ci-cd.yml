@@ -411,16 +411,26 @@ jobs:
             "https://127.0.0.1:2032/"
           )
           echo "Verifying stack (domain ${TLS_HOST} or local nginx / :2032)..."
+          # Avoid flaky TLS EOF (curl 56) through Cloudflare / HTTP2 — never fail deploy on debug body fetch.
+          CURL_VERIFY=(
+            curl -ksS
+            --http1.1
+            --connect-timeout 10
+            --max-time 25
+            --retry 2
+            --retry-delay 1
+            --retry-all-errors
+          )
           STACK_UP=false
           for i in $(seq 1 40); do
             for idx in 0 1 2; do
               h="${HEALTH_URLS[$idx]}"
               p="${HOME_URLS[$idx]}"
-              if curl -kfsS --connect-timeout 5 "$h" >/dev/null \
-                && curl -kfsS --connect-timeout 5 "$p" >/dev/null; then
+              if "${CURL_VERIFY[@]}" -f -o /dev/null "$h" \
+                && "${CURL_VERIFY[@]}" -f -o /dev/null "$p"; then
                 STACK_UP=true
                 echo "Healthy via $h (attempt $i)"
-                curl -kfsS "$h"
+                "${CURL_VERIFY[@]}" "$h" | head -c 4096 || true
                 echo ""
                 break 2
               fi
@@ -442,12 +452,24 @@ jobs:
             exit 1
           fi
 
-          LOGIN_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${TLS_HOST}/login" \
-            || curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://127.0.0.1:2032/login" \
-            || echo "000")
-          AUTH_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${TLS_HOST}/api/auth/me" \
-            || curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://127.0.0.1:2032/api/auth/me" \
-            || echo "000")
+          probe_http_code() {
+            local url
+            for url in "$@"; do
+              code=$("${CURL_VERIFY[@]}" -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || true)
+              if [ -n "$code" ] && [ "$code" != "000" ]; then
+                echo "$code"
+                return 0
+              fi
+            done
+            echo "000"
+          }
+
+          LOGIN_CODE=$(probe_http_code \
+            "https://${TLS_HOST}/login" \
+            "https://127.0.0.1:2032/login")
+          AUTH_CODE=$(probe_http_code \
+            "https://${TLS_HOST}/api/auth/me" \
+            "https://127.0.0.1:2032/api/auth/me")
           echo "Post-deploy probe: /login=${LOGIN_CODE} /api/auth/me=${AUTH_CODE}"
           if [ "$LOGIN_CODE" != "200" ] && [ "$LOGIN_CODE" != "307" ] && [ "$LOGIN_CODE" != "308" ]; then
             echo "::warning::/login returned ${LOGIN_CODE} (expected 200/307)"
