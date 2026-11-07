@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import {
   APP_VERSION,
   CHANGELOG,
-  CHANGELOG_SECTION_LABELS,
   CHANGELOG_SECTION_ORDER,
   type ChangelogSectionKey,
 } from '@/data/changelog';
@@ -72,6 +71,7 @@ function ChangelogItemList({ items }: { readonly items: string[] }) {
 
 export function ChangelogModal({ open, onOpenChange }: IChangelogModalProps) {
   const t = useTranslations('shell.changelog');
+  const tChangelog = useTranslations('changelog');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -112,7 +112,7 @@ export function ChangelogModal({ open, onOpenChange }: IChangelogModalProps) {
                   <span className="rounded-md bg-primary/15 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums text-primary ring-1 ring-primary/25">
                     v{entry.version}
                   </span>
-                  <h3 className="text-sm font-semibold text-foreground">{entry.title}</h3>
+                  <h3 className="text-sm font-semibold text-foreground">{tChangelog(entry.titleKey)}</h3>
                 </div>
                 <time
                   dateTime={entry.date}
@@ -123,10 +123,12 @@ export function ChangelogModal({ open, onOpenChange }: IChangelogModalProps) {
               </div>
               <div className="space-y-4 p-4">
                 {CHANGELOG_SECTION_ORDER.map((sectionKey) => {
-                  const items = entry[sectionKey];
-                  if (!items?.length) {
+                  const itemKeys = entry[sectionKey];
+                  if (!itemKeys?.length) {
                     return null;
                   }
+
+                  const items = itemKeys.map((key) => tChangelog(key));
 
                   return (
                     <div
@@ -140,7 +142,7 @@ export function ChangelogModal({ open, onOpenChange }: IChangelogModalProps) {
                         variant={sectionBadgeVariant(sectionKey)}
                         className="mb-2.5 h-6 px-2.5 text-[11px]"
                       >
-                        {CHANGELOG_SECTION_LABELS[sectionKey]}
+                        {tChangelog(`sections.${sectionKey}`)}
                       </Badge>
                       <ChangelogItemList items={items} />
                     </div>

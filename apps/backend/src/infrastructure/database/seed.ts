@@ -24,6 +24,17 @@ for (const envPath of [
   }
 }
 
+function normalizeSymbolPe(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const text = String(value).trim();
+  if (!text || text === '-' || text === '—') {
+    return null;
+  }
+  return text;
+}
+
 const STANDARD_PERMISSIONS = [
   { name: 'sniper:arm', description: 'Arm high-speed trading engine' },
   { name: 'sniper:disarm', description: 'Disarm and emergency stop trading engine' },
@@ -110,6 +121,59 @@ async function seedInitialAdmin(db: Database, adminRoleId: string) {
     .onConflictDoNothing();
 }
 
+async function seedSymbolsIfEmpty(db: Database) {
+  const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.symbols);
+  if (count !== 0) {
+    return;
+  }
+
+  const symbolsPath = path.resolve(__dirname, '../../../data/symbols.json');
+  if (!fs.existsSync(symbolsPath)) {
+    return;
+  }
+
+  console.log(`--> Seeding initial symbols from ${symbolsPath}...`);
+  const raw = fs.readFileSync(symbolsPath, 'utf8');
+  const list = JSON.parse(raw) as unknown;
+  if (!Array.isArray(list)) {
+    return;
+  }
+
+  try {
+    const batchSize = 200;
+    for (let i = 0; i < list.length; i += batchSize) {
+      const chunk = list.slice(i, i + batchSize).map((item) => ({
+        isin: item.isin,
+        symbol: item.symbol?.trim(),
+        name: item.name,
+        insCode: item.insCode,
+        market: item.market,
+        groupName: item.group,
+        basePrice: item.basePrice,
+        closingPrice: item.closingPrice,
+        yesterdayPrice: item.yesterdayPrice,
+        pMax: item.pMax,
+        pMin: item.pMin,
+        baseVolume: item.baseVolume,
+        volume: item.volume,
+        value: item.value,
+        tradesCount: item.tradesCount,
+        eps: item.eps,
+        pe: normalizeSymbolPe(item.pe),
+        isIpo: Boolean(item.isIpo),
+        ipoDetails: item.ipoDetails,
+      })).filter((item) => item.isin && item.symbol);
+
+      if (chunk.length > 0) {
+        await db.insert(schema.symbols).values(chunk).onConflictDoNothing();
+      }
+    }
+    console.log(`✓ Seeded ${list.length} symbols into PostgreSQL database.`);
+  } catch (err: unknown) {
+    console.warn('--> Symbol seed skipped (non-fatal):', err instanceof Error ? err.message : err);
+  }
+}
+
 export async function runDatabaseSeed() {
   console.log('--> Starting database seeding...');
   const db = getDrizzleDatabase();
@@ -175,47 +239,7 @@ export async function runDatabaseSeed() {
 
     await seedInitialAdmin(db, adminRole.id);
 
-    // 4. Seed Symbols from data/symbols.json if symbols table is empty
-    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.symbols);
-    if (count === 0) {
-      const symbolsPath = path.resolve(__dirname, '../../../data/symbols.json');
-      if (fs.existsSync(symbolsPath)) {
-        console.log(`--> Seeding initial symbols from ${symbolsPath}...`);
-        const raw = fs.readFileSync(symbolsPath, 'utf8');
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          const batchSize = 200;
-          for (let i = 0; i < list.length; i += batchSize) {
-            const chunk = list.slice(i, i + batchSize).map((item) => ({
-              isin: item.isin,
-              symbol: item.symbol?.trim(),
-              name: item.name,
-              insCode: item.insCode,
-              market: item.market,
-              groupName: item.group,
-              basePrice: item.basePrice,
-              closingPrice: item.closingPrice,
-              yesterdayPrice: item.yesterdayPrice,
-              pMax: item.pMax,
-              pMin: item.pMin,
-              baseVolume: item.baseVolume,
-              volume: item.volume,
-              value: item.value,
-              tradesCount: item.tradesCount,
-              eps: item.eps,
-              pe: item.pe ? String(item.pe) : null,
-              isIpo: Boolean(item.isIpo),
-              ipoDetails: item.ipoDetails,
-            })).filter((item) => item.isin && item.symbol);
-
-            if (chunk.length > 0) {
-              await db.insert(schema.symbols).values(chunk).onConflictDoNothing();
-            }
-          }
-          console.log(`✓ Seeded ${list.length} symbols into PostgreSQL database.`);
-        }
-      }
-    }
+    await seedSymbolsIfEmpty(db);
 
     console.log('✓ Database seeding completed successfully.');
   } catch (err: unknown) {
