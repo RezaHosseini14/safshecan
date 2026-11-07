@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "tsc && node ./scripts/copy-messages.mjs",
+    "audit:keys": "node ./scripts/audit-keys.mjs",
     "test": "vitest run",
     "clean": "rimraf dist"
   },

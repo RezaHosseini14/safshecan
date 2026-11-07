@@ -21,6 +21,7 @@
   "noData": "بدون داده",
   "unknownError": "خطای ناشناخته",
   "localCache": "کش محلی",
+  "loading": "در حال پردازش…",
   "refreshing": "در حال بروزرسانی…",
   "httpError": "کد خطای HTTP {status}",
   "priceEmpty": "قیمت: —",
