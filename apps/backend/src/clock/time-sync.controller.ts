@@ -5,6 +5,7 @@ import { Throttle } from '@nestjs/throttler';
 import { NestTimeSyncService } from './time-sync.service.js';
 import { TimeOffsetDto } from './dto/time-offset.dto.js';
 import { TimeSyncScheduler } from './time-sync.scheduler.js';
+import { RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('TimeSync')
 @Controller('api/time')
@@ -16,6 +17,7 @@ export class TimeSyncController {
 
   @Post('sync')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('config:write')
   @Throttle({ default: { limit: 15, ttl: 60000 } })
   @ApiOperation({ summary: t('swagger', 'sync') })
   @ApiResponse({ status: 200, description: t('swagger', 'syncOk') })
@@ -31,6 +33,7 @@ export class TimeSyncController {
 
   @Post('offset')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('config:write')
   @ApiOperation({ summary: t('swagger', 'setOffset') })
   @ApiResponse({ status: 200, description: t('swagger', 'offsetOk') })
   setOffset(@Body() body: TimeOffsetDto) {

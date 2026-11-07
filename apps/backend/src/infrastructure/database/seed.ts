@@ -1,12 +1,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sql } from 'drizzle-orm';
-import { closeDatabaseConnections, getDrizzleDatabase } from './database.js';
+import dotenv from 'dotenv';
+import { eq, sql } from 'drizzle-orm';
+import { PasswordService } from '../../auth/password.service.js';
+import { closeDatabaseConnections, getDrizzleDatabase, type Database } from './database.js';
 import * as schema from './schema/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const BOOTSTRAP_ADMIN_HASH_PLACEHOLDER = 'bootstrap_admin_hash_placeholder';
+
+for (const envPath of [
+  path.resolve(__dirname, '../../../../../.env'),
+  path.resolve(__dirname, '../../../.env'),
+]) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 const STANDARD_PERMISSIONS = [
   { name: 'sniper:arm', description: 'Arm high-speed trading engine' },
@@ -20,6 +34,64 @@ const STANDARD_PERMISSIONS = [
   { name: 'user:manage', description: 'Manage system users and role assignments' },
   { name: 'audit:read', description: 'View security audit logs' },
 ];
+
+async function seedInitialAdmin(db: Database, adminRoleId: string) {
+  const username = (process.env.INITIAL_ADMIN_USERNAME || 'admin').trim();
+  const password = (process.env.INITIAL_ADMIN_PASSWORD || '').trim();
+  const fullName = (process.env.INITIAL_ADMIN_FULL_NAME || 'System Administrator').trim();
+
+  if (!password || password.length < 8) {
+    console.log(
+      '--> Skipping initial admin user (set INITIAL_ADMIN_PASSWORD in .env with at least 8 characters, or use: pnpm cli create-admin).'
+    );
+    return;
+  }
+
+  const passwordService = new PasswordService();
+  const existing = await db.query.users.findFirst({
+    where: eq(schema.users.username, username),
+  });
+
+  if (existing) {
+    const isBootstrapPlaceholder = existing.passwordHash.includes(BOOTSTRAP_ADMIN_HASH_PLACEHOLDER);
+    if (!isBootstrapPlaceholder) {
+      console.log(`--> Admin user "${username}" already exists; password left unchanged.`);
+      return;
+    }
+
+    const passwordHash = await passwordService.hash(password);
+    await db
+      .update(schema.users)
+      .set({ passwordHash, fullName, isActive: true, updatedAt: new Date() })
+      .where(eq(schema.users.id, existing.id));
+    console.log(`✓ Reset bootstrap placeholder password for admin user "${username}".`);
+  } else {
+    const passwordHash = await passwordService.hash(password);
+    const [user] = await db
+      .insert(schema.users)
+      .values({
+        username,
+        passwordHash,
+        fullName,
+        isActive: true,
+      })
+      .returning();
+
+    await db
+      .insert(schema.userRoles)
+      .values({ userId: user.id, roleId: adminRoleId })
+      .onConflictDoNothing();
+
+    console.log(`✓ Created initial admin user "${username}" (id: ${user.id}).`);
+    return;
+  }
+
+  const userId = existing.id;
+  await db
+    .insert(schema.userRoles)
+    .values({ userId, roleId: adminRoleId })
+    .onConflictDoNothing();
+}
 
 export async function runDatabaseSeed() {
   console.log('--> Starting database seeding...');
@@ -83,6 +155,8 @@ export async function runDatabaseSeed() {
         .values({ roleId: viewerRole.id, permissionId: perm.id })
         .onConflictDoNothing();
     }
+
+    await seedInitialAdmin(db, adminRole.id);
 
     // 4. Seed Symbols from data/symbols.json if symbols table is empty
     const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.symbols);

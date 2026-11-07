@@ -19,7 +19,8 @@
     "test:frontend": "pnpm --filter @saf-shekan/frontend test",
     "lint": "turbo run lint",
     "deploy:remote": "node scripts/deploy-remote.mjs",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "db:bootstrap": "pnpm --filter @saf-shekan/backend db:migrate && pnpm --filter @saf-shekan/backend db:seed"
   },
   "keywords": [
     "bourse",

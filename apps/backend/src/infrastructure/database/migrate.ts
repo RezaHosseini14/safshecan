@@ -1,10 +1,22 @@
+import fs from 'node:fs';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { closeDatabaseConnections, getDrizzleDatabase } from './database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+for (const envPath of [
+  path.resolve(__dirname, '../../../../../.env'),
+  path.resolve(__dirname, '../../../.env'),
+]) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 import { sql } from 'drizzle-orm';
 

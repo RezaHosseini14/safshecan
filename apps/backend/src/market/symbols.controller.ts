@@ -4,16 +4,16 @@ import { t } from '@saf-shekan/i18n';
 import { SkipThrottle } from '@nestjs/throttler';
 import { SymbolsService, SymbolItem, SyncStatus } from './symbols.service.js';
 import { SymbolQueryDto } from './dto/symbol-query.dto.js';
-import { Public } from '../auth/decorators.js';
+import { RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('Symbols')
-@Public()
 @SkipThrottle()
 @Controller('api')
 export class SymbolsController {
   constructor(private readonly symbolsService: SymbolsService) {}
 
   @Get('symbols')
+  @RequirePermissions('market:read')
   @HttpCode(200)
   @ApiOperation({ summary: t('swagger', 'symbolList') })
   @ApiResponse({ status: 200, description: t('swagger', 'symbolListOk') })
@@ -29,6 +29,7 @@ export class SymbolsController {
   }
 
   @Get('symbols/ipos')
+  @RequirePermissions('market:read')
   @HttpCode(200)
   @ApiOperation({ summary: t('swagger', 'ipoList') })
   @ApiResponse({ status: 200, description: t('swagger', 'ipoListOk') })
@@ -41,6 +42,7 @@ export class SymbolsController {
   }
 
   @Get('symbols/status')
+  @RequirePermissions('market:read')
   @HttpCode(200)
   @ApiOperation({ summary: t('swagger', 'symbolSyncStatus') })
   @ApiResponse({ status: 200, description: t('swagger', 'symbolSyncStatusOk') })
@@ -59,6 +61,7 @@ export class SymbolsController {
   }
 
   @Post('symbols/refresh')
+  @RequirePermissions('market:watch')
   @HttpCode(200)
   @ApiOperation({ summary: t('swagger', 'symbolRefresh') })
   @ApiResponse({ status: 200, description: t('swagger', 'symbolRefreshOk') })

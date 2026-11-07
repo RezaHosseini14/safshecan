@@ -9,6 +9,7 @@ import { PersianSpeechService } from './persian-speech.service.js';
 import { MarketQuoteQueryDto, MarketSpeechBodyDto, MarketWatchBodyDto } from './dto/market-data.dto.js';
 import { LiveQuote, MarketDataStatus } from './market-data.types.js';
 import { MarketDossier } from './market-dossier.types.js';
+import { RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('Market Data')
 @SkipThrottle()
@@ -21,6 +22,7 @@ export class MarketDataController {
   ) {}
 
   @Get('status')
+  @RequirePermissions('market:read')
   @HttpCode(200)
   @ApiOperation({ summary: t('swagger', 'marketStatus') })
   @ApiResponse({ status: 200, description: t('swagger', 'marketStatusOk') })
@@ -39,6 +41,7 @@ export class MarketDataController {
   }
 
   @Get('quote')
+  @RequirePermissions('market:read')
   @HttpCode(200)
   @ApiOperation({
     summary: t('swagger', 'quote'),
@@ -83,6 +86,7 @@ export class MarketDataController {
   }
 
   @Get('dossier')
+  @RequirePermissions('market:read')
   @HttpCode(200)
   @ApiOperation({
     summary: t('swagger', 'dossier'),
@@ -98,6 +102,7 @@ export class MarketDataController {
   }
 
   @Post('speech')
+  @RequirePermissions('market:read')
   @SkipThrottle({ default: false })
   @Throttle({ default: { limit: 12, ttl: 60000 } })
   @Header('Content-Type', 'audio/mpeg')
@@ -110,6 +115,7 @@ export class MarketDataController {
   }
 
   @Post('watch')
+  @RequirePermissions('market:watch')
   @HttpCode(200)
   @ApiOperation({ summary: t('swagger', 'watchAdd') })
   watch(@Body() body: MarketWatchBodyDto) {
@@ -117,6 +123,7 @@ export class MarketDataController {
   }
 
   @Delete('watch')
+  @RequirePermissions('market:watch')
   @HttpCode(200)
   @ApiOperation({ summary: t('swagger', 'watchRemove') })
   unwatch(@Query('symbol') symbol?: string) {

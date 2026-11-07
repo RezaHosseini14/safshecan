@@ -5,6 +5,7 @@ import { Throttle } from '@nestjs/throttler';
 import { redactBotConfig } from '../bot-config/redact.js';
 import { BrokersService } from './brokers.service.js';
 import { ApplyPresetDto, ParseCurlDto } from './dto/broker.dto.js';
+import { RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('Brokers & cURL')
 @Controller('api')
@@ -12,6 +13,7 @@ export class BrokersController {
   constructor(private readonly brokersService: BrokersService) {}
 
   @Get('presets')
+  @RequirePermissions('config:read')
   @ApiOperation({ summary: t('swagger', 'presetList') })
   getPresets() {
     return {
@@ -22,6 +24,7 @@ export class BrokersController {
 
   @Post('presets/apply')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('config:write')
   @ApiOperation({ summary: t('swagger', 'presetApply') })
   @ApiResponse({ status: 200, description: t('swagger', 'presetApplied') })
   applyPreset(@Body() body: ApplyPresetDto) {
@@ -34,6 +37,7 @@ export class BrokersController {
 
   @Post('curl/parse')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('broker:manage')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: t('swagger', 'curlParse') })
   @ApiResponse({ status: 200, description: t('swagger', 'curlParsed') })

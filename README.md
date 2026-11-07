@@ -97,7 +97,12 @@ saf-shekan/
 صف‌شکن مجهز به یک رابط ترمینالی سریع جهت مدیریت، مهاجرت داده‌ها و شبیه‌سازی است:
 
 ```bash
-# ایجاد مدیر اولیه سامانه (Initial Admin Bootstrap)
+# نقش‌ها + کاربر مدیر از .env (پس از کپی .env.example → .env و تنظیم DATABASE_URL)
+pnpm --filter @saf-shekan/backend db:migrate
+pnpm --filter @saf-shekan/backend db:seed
+# ورود: INITIAL_ADMIN_USERNAME / INITIAL_ADMIN_PASSWORD (پیش‌فرض dev: admin / SafShekan_Dev123!)
+
+# یا دستی:
 pnpm cli create-admin admin "YourPassword123!" "مدیر ارشد سامانه"
 
 # مهاجرت امن و یک‌بار مصرف داده‌های config.json به دیتابیس PostgreSQL

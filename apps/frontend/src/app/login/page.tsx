@@ -41,7 +41,10 @@ function LoginForm() {
 
       if (res.success) {
         window.location.href = returnUrl;
+        return;
       }
+
+      setErrorMessage(t('invalidCredentials'));
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         setErrorMessage(err.message);

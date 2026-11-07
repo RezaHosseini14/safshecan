@@ -65,14 +65,9 @@ const nextConfig: NextConfig = {
       ];
     },
     async rewrites() {
-      // Proxies /api and /ws to Nest. Used by `pnpm dev:ui` (Next :3000 → Nest :3001)
-      // and by the frontend container (API_URL=http://backend:3000).
+      // /api/* is proxied via app/api/[[...path]]/route.ts so Set-Cookie reaches the browser.
       const apiUrl = process.env.API_URL || "http://127.0.0.1:3001";
       return [
-        {
-          source: "/api/:path*",
-          destination: `${apiUrl}/api/:path*`,
-        },
         {
           source: "/ws",
           destination: `${apiUrl}/ws`,

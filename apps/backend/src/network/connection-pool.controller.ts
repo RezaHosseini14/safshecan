@@ -4,6 +4,7 @@ import { t } from '@saf-shekan/i18n';
 import { ConnectionPoolService } from './connection-pool.service.js';
 import { BotConfigService } from '../bot-config/bot-config.service.js';
 import { PingDto, TestConnectionDto } from './dto/connection.dto.js';
+import { RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('Network & Broker')
 @Controller('api')
@@ -15,6 +16,7 @@ export class ConnectionPoolController {
 
   @Post('broker/test-connection')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('broker:manage')
   @ApiOperation({ summary: t('swagger', 'connectionTest') })
   @ApiResponse({ status: 200, description: t('swagger', 'connectionTestOk') })
   async testConnection(@Body() body: TestConnectionDto) {
@@ -36,6 +38,7 @@ export class ConnectionPoolController {
 
   @Post('network/ping')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions('broker:manage')
   @ApiOperation({ summary: t('swagger', 'ping') })
   @ApiResponse({ status: 200, description: t('swagger', 'pingOk') })
   async pingBroker(@Body() body: PingDto) {

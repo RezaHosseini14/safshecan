@@ -13,6 +13,7 @@ import {
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service.js';
+import { clearSessionCookies, setSessionCookies } from './session-cookies.js';
 import { CurrentUser, Public, RequirePermissions } from './decorators.js';
 import type { AuthenticatedUser } from './auth.types.js';
 import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
@@ -112,22 +113,13 @@ export class AuthController {
     }
 
     if (result.response && result.refreshToken) {
-      const isProd = process.env.NODE_ENV === 'production';
-      res.cookie('access_token', result.response.accessToken, {
-        httpOnly: true,
-        secure: isProd,
-        sameSite: 'strict',
-        maxAge: result.response.expiresInSeconds * 1000,
-        path: '/',
-      });
-
-      res.cookie('refresh_token', result.refreshToken, {
-        httpOnly: true,
-        secure: isProd,
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        path: '/api/auth',
-      });
+      setSessionCookies(
+        req,
+        res,
+        result.response.accessToken,
+        result.refreshToken,
+        result.response.expiresInSeconds
+      );
 
       return {
         success: true,
@@ -144,6 +136,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Complete two-factor authentication login' })
   async login2Fa(
     @Body() body: Login2FaDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response
   ) {
     const { response, refreshToken } = await this.authService.complete2FaLogin(
@@ -151,22 +144,7 @@ export class AuthController {
       body.code
     );
 
-    const isProd = process.env.NODE_ENV === 'production';
-    res.cookie('access_token', response.accessToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'strict',
-      maxAge: response.expiresInSeconds * 1000,
-      path: '/',
-    });
-
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/api/auth',
-    });
+    setSessionCookies(req, res, response.accessToken, refreshToken, response.expiresInSeconds);
 
     return {
       success: true,
@@ -204,22 +182,7 @@ export class AuthController {
       userAgent
     );
 
-    const isProd = process.env.NODE_ENV === 'production';
-    res.cookie('access_token', response.accessToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'strict',
-      maxAge: response.expiresInSeconds * 1000,
-      path: '/',
-    });
-
-    res.cookie('refresh_token', newRefreshToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/api/auth',
-    });
+    setSessionCookies(req, res, response.accessToken, newRefreshToken, response.expiresInSeconds);
 
     return {
       success: true,
@@ -240,8 +203,7 @@ export class AuthController {
       await this.authService.logout(token, userId);
     }
 
-    res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/api/auth' });
+    clearSessionCookies(req, res);
 
     return {
       success: true,
@@ -285,11 +247,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Revoke all sessions (Log out all devices)' })
   async revokeAllSessions(
     @CurrentUser('id') userId: string,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response
   ) {
     await this.authService.revokeAllSessions(userId);
-    res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/api/auth' });
+    clearSessionCookies(req, res);
     return {
       success: true,
       message: t('auth', 'allSessionsRevoked'),
@@ -333,7 +295,7 @@ export class AuthController {
   }
 
   @Get('users')
-  @RequirePermissions('admin:manage_users')
+  @RequirePermissions('user:manage')
   @ApiOperation({ summary: 'List all users (Admin only)' })
   async listUsers() {
     const users = await this.authService.listUsers();
@@ -344,7 +306,7 @@ export class AuthController {
   }
 
   @Post('users')
-  @RequirePermissions('admin:manage_users')
+  @RequirePermissions('user:manage')
   @ApiOperation({ summary: 'Create a new user (Admin only)' })
   async createUser(@Body() body: CreateUserDto) {
     const user = await this.authService.createUser(
@@ -360,7 +322,7 @@ export class AuthController {
   }
 
   @Post('users/:id/toggle')
-  @RequirePermissions('admin:manage_users')
+  @RequirePermissions('user:manage')
   @ApiOperation({ summary: 'Toggle user active/inactive status (Admin only)' })
   async toggleUser(
     @Param('id') targetUserId: string,

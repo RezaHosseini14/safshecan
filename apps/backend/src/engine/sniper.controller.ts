@@ -7,7 +7,7 @@ import { BotConfigService } from '../bot-config/bot-config.service.js';
 import { BROKER_PRESETS } from '../brokerage/broker-presets.js';
 import { NestTimeSyncService } from '../clock/time-sync.service.js';
 import { SniperService } from './sniper.service.js';
-import { Public, RequirePermissions } from '../auth/decorators.js';
+import { RequirePermissions } from '../auth/decorators.js';
 
 @ApiTags('Sniper Engine & System Status')
 @Controller('api')
@@ -18,8 +18,8 @@ export class SniperController {
     private readonly timeSyncService: NestTimeSyncService
   ) {}
 
-  @Public()
   @Get('status')
+  @RequirePermissions('config:read')
   @ApiOperation({ summary: t('swagger', 'status') })
   @ApiResponse({ status: 200, description: t('swagger', 'statusOk') })
   getStatus() {
@@ -32,8 +32,8 @@ export class SniperController {
     };
   }
 
-  @Public()
   @Get('reports')
+  @RequirePermissions('audit:read')
   @ApiOperation({ summary: t('swagger', 'history') })
   @ApiResponse({ status: 200, description: t('swagger', 'historyOk') })
   getReports() {
