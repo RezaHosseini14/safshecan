@@ -71,6 +71,9 @@ services:
       - JWT_KEY_ID=${JWT_KEY_ID:-safshekan-ed25519-v1}
       - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
       - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
+      - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-admin}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD}
+      - INITIAL_ADMIN_FULL_NAME=${INITIAL_ADMIN_FULL_NAME:-System Administrator}
     volumes:
       - ./config.json:/app/apps/backend/config.json
       - safshekan_data:/app/data

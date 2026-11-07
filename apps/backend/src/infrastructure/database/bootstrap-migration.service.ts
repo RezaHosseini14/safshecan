@@ -6,6 +6,7 @@ import { eq, desc } from 'drizzle-orm';
 import type { BotConfig } from '@saf-shekan/core';
 import { DatabaseService } from './database.service.js';
 import * as schema from './schema/index.js';
+import { BOOTSTRAP_ADMIN_HASH_PLACEHOLDER } from './bootstrap-admin.constants.js';
 import { EnvelopeCipherService } from '../security/envelope-cipher.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,7 +72,7 @@ export class BootstrapMigrationService {
           .insert(schema.users)
           .values({
             username: 'admin',
-            passwordHash: 'argon2id$v=19$m=65536,t=3,p=1$bootstrap_admin_hash_placeholder',
+            passwordHash: BOOTSTRAP_ADMIN_HASH_PLACEHOLDER,
             fullName: 'Administrator',
             isActive: true,
           })

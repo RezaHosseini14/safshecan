@@ -4,13 +4,15 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { eq, sql } from 'drizzle-orm';
 import { PasswordService } from '../../auth/password.service.js';
+import {
+  isBootstrapAdminPasswordHash,
+  isUnusableLoginPasswordHash,
+} from './bootstrap-admin.constants.js';
 import { closeDatabaseConnections, getDrizzleDatabase, type Database } from './database.js';
 import * as schema from './schema/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const BOOTSTRAP_ADMIN_HASH_PLACEHOLDER = 'bootstrap_admin_hash_placeholder';
 
 for (const envPath of [
   path.resolve(__dirname, '../../../../../.env'),
@@ -53,18 +55,33 @@ async function seedInitialAdmin(db: Database, adminRoleId: string) {
   });
 
   if (existing) {
-    const isBootstrapPlaceholder = existing.passwordHash.includes(BOOTSTRAP_ADMIN_HASH_PLACEHOLDER);
-    if (!isBootstrapPlaceholder) {
-      console.log(`--> Admin user "${username}" already exists; password left unchanged.`);
-      return;
-    }
+    const forceSync =
+      process.env.INITIAL_ADMIN_SYNC_PASSWORD === '1' ||
+      process.env.INITIAL_ADMIN_SYNC_PASSWORD === 'true';
+    const mustSetPassword =
+      forceSync || isUnusableLoginPasswordHash(existing.passwordHash);
 
-    const passwordHash = await passwordService.hash(password);
-    await db
-      .update(schema.users)
-      .set({ passwordHash, fullName, isActive: true, updatedAt: new Date() })
-      .where(eq(schema.users.id, existing.id));
-    console.log(`✓ Reset bootstrap placeholder password for admin user "${username}".`);
+    if (!mustSetPassword) {
+      console.log(`--> Admin user "${username}" already exists; password left unchanged.`);
+    } else {
+      const passwordHash = await passwordService.hash(password);
+      await db
+        .update(schema.users)
+        .set({
+          passwordHash,
+          fullName,
+          isActive: true,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.id, existing.id));
+      console.log(
+        `✓ Set admin password for "${username}" (${
+          isBootstrapAdminPasswordHash(existing.passwordHash) ? 'bootstrap placeholder' : 'unusable hash'
+        }).`
+      );
+    }
   } else {
     const passwordHash = await passwordService.hash(password);
     const [user] = await db

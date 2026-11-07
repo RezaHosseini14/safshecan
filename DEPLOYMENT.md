@@ -132,7 +132,12 @@ METRICS_AUTH_TOKEN=your_secure_internal_metrics_bearer_token
 ```bash
 # اجرای مایگریشن‌ها در کانتینر یا هاست:
 pnpm --filter @saf-shekan/backend db:migrate
+
+# نقش‌ها، دسترسی‌ها، و ادمین اولیه (INITIAL_ADMIN_* در .env):
+pnpm --filter @saf-shekan/backend db:seed
 ```
+
+اسکریپت دیپلوی (`scripts/ci-deploy-on-host.sh`) بعد از migrate به‌صورت خودکار `seed.js` را هم اجرا می‌کند. اگر کاربر `admin` هنوز هش bootstrap دارد، seed رمز `INITIAL_ADMIN_PASSWORD` را اعمال می‌کند.
 
 ### ۲. مهاجرت داده‌های قدیمی `config.json` به دیتابیس (یک‌بار مصرف و امن)
 کانفیگ‌های قبلی فایل `config.json` هرگز در بوت برنامه بارگذاری خودکار نمی‌شوند. انتقال آن‌ها از طریق CLI اختصاصی و درون یک تراکنش اتمیک انجام می‌شود:

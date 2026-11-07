@@ -91,6 +91,15 @@ if ! grep -q '^JWT_KEY_ID=.\+' .env; then
   sed -i '/^JWT_KEY_ID=/d' .env || true
   echo "JWT_KEY_ID=safshekan-ed25519-v1" >> .env
 fi
+if ! grep -q '^INITIAL_ADMIN_USERNAME=.\+' .env; then
+  echo "INITIAL_ADMIN_USERNAME=admin" >> .env
+fi
+if ! grep -q '^INITIAL_ADMIN_PASSWORD=.\+' .env; then
+  echo "INITIAL_ADMIN_PASSWORD=SafShekan_Dev123!" >> .env
+fi
+if ! grep -q '^INITIAL_ADMIN_FULL_NAME=.\+' .env; then
+  echo "INITIAL_ADMIN_FULL_NAME=System Administrator" >> .env
+fi
 
 sed -i '/^API_IMAGE=/d;/^WEB_IMAGE=/d' .env || true
 docker rm -f saf-shekan-api saf-shekan-web 2>/dev/null || true
@@ -138,6 +147,13 @@ echo "--> Executing database migrations..."
 if ! docker compose -f docker-compose.yml run --rm --no-deps backend \
   node apps/backend/dist/infrastructure/database/migrate.js; then
   echo "::error::Database migrations failed! Halting deployment to protect uptime."
+  exit 1
+fi
+
+echo "--> Seeding RBAC, permissions, and initial admin (from INITIAL_ADMIN_* in .env)..."
+if ! docker compose -f docker-compose.yml run --rm --no-deps backend \
+  node apps/backend/dist/infrastructure/database/seed.js; then
+  echo "::error::Database seed failed! Halting deployment to protect uptime."
   exit 1
 fi
 
